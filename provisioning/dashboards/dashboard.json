@@ -1,0 +1,189 @@
+{
+    "annotations":  {
+                        "list":  [
+                                     {
+                                         "builtIn":  1,
+                                         "datasource":  {
+                                                            "type":  "grafana",
+                                                            "uid":  "-- Grafana --"
+                                                        },
+                                         "enable":  true,
+                                         "hide":  true,
+                                         "iconColor":  "rgba(0, 211, 255, 1)",
+                                         "name":  "Annotations \u0026 Alerts",
+                                         "type":  "dashboard"
+                                     }
+                                 ]
+                    },
+    "editable":  true,
+    "fiscalYearStartMonth":  0,
+    "graphTooltip":  0,
+    "id":  1,
+    "links":  [
+
+              ],
+    "liveNow":  false,
+    "panels":  [
+                   {
+                       "datasource":  {
+                                          "type":  "grafana-testdata-datasource",
+                                          "uid":  "trlxrdZVk"
+                                      },
+                       "gridPos":  {
+                                       "h":  8,
+                                       "w":  12,
+                                       "x":  0,
+                                       "y":  0
+                                   },
+                       "id":  1,
+                       "options":  {
+                                       "cellHeight":  "sm",
+                                       "columnGrouping":  {
+                                                              "enabled":  true,
+                                                              "ungroupedColumns":  [
+                                                                                       "Region"
+                                                                                   ],
+                                                              "rootGroups":  [
+                                                                                 {
+                                                                                     "id":  "rg-sales",
+                                                                                     "type":  "root-group",
+                                                                                     "column":  "Sales",
+                                                                                     "orientation":  "vertical",
+                                                                                     "children":  [
+                                                                                                      {
+                                                                                                          "id":  "grp-sales-split",
+                                                                                                          "type":  "group-container",
+                                                                                                          "orientation":  "horizontal",
+                                                                                                          "children":  [
+                                                                                                                           {
+                                                                                                                               "id":  "col-plan",
+                                                                                                                               "type":  "column",
+                                                                                                                               "column":  "Plan"
+                                                                                                                           },
+                                                                                                                           {
+                                                                                                                               "id":  "col-actual",
+                                                                                                                               "type":  "column",
+                                                                                                                               "column":  "Actual"
+                                                                                                                           }
+                                                                                                                       ]
+                                                                                                      }
+                                                                                                  ]
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "rg-profit",
+                                                                                     "type":  "root-group",
+                                                                                     "column":  "Profit",
+                                                                                     "orientation":  "vertical",
+                                                                                     "children":  [
+                                                                                                      {
+                                                                                                          "id":  "grp-profit-split",
+                                                                                                          "type":  "group-container",
+                                                                                                          "orientation":  "horizontal",
+                                                                                                          "children":  [
+                                                                                                                           {
+                                                                                                                               "id":  "col-margin",
+                                                                                                                               "type":  "column",
+                                                                                                                               "column":  "Margin %"
+                                                                                                                           },
+                                                                                                                           {
+                                                                                                                               "id":  "col-growth",
+                                                                                                                               "type":  "column",
+                                                                                                                               "column":  "Growth %"
+                                                                                                                           }
+                                                                                                                       ]
+                                                                                                      }
+                                                                                                  ]
+                                                                                 }
+                                                                             ]
+                                                          },
+                                       "enablePagination":  false,
+                                       "frameIndex":  0,
+                                       "showHeader":  true,
+                                       "showTypeIcons":  false,
+                                       "sortBy":  [
+
+                                                  ]
+                                   },
+                       "targets":  [
+                                       {
+                                           "datasource":  {
+                                                              "type":  "grafana-testdata-datasource",
+                                                              "uid":  "trlxrdZVk"
+                                                          },
+                                           "refId":  "A",
+                                           "scenarioId":  "raw_frame",
+                                           "rawFrameContent":  "[\n  {\n    \"columns\": [\n      { \"text\": \"Region\", \"type\": \"string\" },\n      { \"text\": \"Sales\", \"type\": \"number\" },\n      { \"text\": \"Plan\", \"type\": \"number\" },\n      { \"text\": \"Actual\", \"type\": \"number\" },\n      { \"text\": \"Profit\", \"type\": \"number\" },\n      { \"text\": \"Margin %\", \"type\": \"number\" },\n      { \"text\": \"Growth %\", \"type\": \"number\" }\n    ],\n    \"rows\": [\n      [\"North\", 1200, 1100, 1250, 320, 26.7, 9.5],\n      [\"South\", 980, 1000, 950, 210, 21.4, -3.2],\n      [\"East\", 1430, 1350, 1470, 410, 28.7, 8.1],\n      [\"West\", 1110, 1080, 1140, 270, 24.3, 5.6]\n    ]\n  }\n]"
+                                       }
+                                   ],
+                       "title":  "Grouped Columns Demo",
+                       "type":  "smelentyev-tablecolumngrouping-panel"
+                   },
+                   {
+                       "datasource":  {
+                                          "type":  "grafana-testdata-datasource",
+                                          "uid":  "trlxrdZVk"
+                                      },
+                       "gridPos":  {
+                                       "h":  8,
+                                       "w":  12,
+                                       "x":  12,
+                                       "y":  0
+                                   },
+                       "id":  2,
+                       "options":  {
+                                       "cellHeight":  "sm",
+                                       "columnGrouping":  {
+                                                              "enabled":  false,
+                                                              "ungroupedColumns":  [
+
+                                                                                   ],
+                                                              "rootGroups":  [
+
+                                                                             ]
+                                                          },
+                                       "enablePagination":  false,
+                                       "frameIndex":  0,
+                                       "showHeader":  true,
+                                       "showTypeIcons":  false,
+                                       "sortBy":  [
+
+                                                  ]
+                                   },
+                       "targets":  [
+                                       {
+                                           "alias":  "",
+                                           "datasource":  {
+                                                              "type":  "grafana-testdata-datasource",
+                                                              "uid":  "trlxrdZVk"
+                                                          },
+                                           "refId":  "A",
+                                           "scenarioId":  "no_data_points"
+                                       }
+                                   ],
+                       "title":  "Sample Panel Title",
+                       "type":  "smelentyev-tablecolumngrouping-panel"
+                   }
+               ],
+    "refresh":  "",
+    "schemaVersion":  39,
+    "tags":  [
+
+             ],
+    "templating":  {
+                       "list":  [
+
+                                ]
+                   },
+    "time":  {
+                 "from":  "now-6h",
+                 "to":  "now"
+             },
+    "timepicker":  {
+
+                   },
+    "timezone":  "",
+    "title":  "Provisioned Grafana_Advanced_Table dashboard",
+    "uid":  "a538aeff-5a8a-42a5-901c-938d896fdd6f",
+    "version":  1,
+    "weekStart":  ""
+}

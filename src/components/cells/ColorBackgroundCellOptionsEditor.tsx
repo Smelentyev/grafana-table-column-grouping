@@ -1,0 +1,51 @@
+import React, { useId } from 'react';
+
+import { SelectableValue } from '@grafana/data';
+import { TableCellBackgroundDisplayMode, TableColoredBackgroundCellOptions } from '@grafana/schema';
+import { Field, RadioButtonGroup, Switch } from '@grafana/ui';
+
+import { TableCellEditorProps } from '../TableCellOptionEditor';
+
+const colorBackgroundOpts: Array<SelectableValue<TableCellBackgroundDisplayMode>> = [
+  { value: TableCellBackgroundDisplayMode.Basic, label: 'Basic' },
+  { value: TableCellBackgroundDisplayMode.Gradient, label: 'Gradient' },
+];
+export const ColorBackgroundCellOptionsEditor = ({
+  cellOptions,
+  onChange,
+}: TableCellEditorProps<TableColoredBackgroundCellOptions>) => {
+  // Set the display mode on change
+  const onCellOptionsChange = (v: TableCellBackgroundDisplayMode) => {
+    onChange({ ...cellOptions, mode: v });
+  };
+  const onColorRowChange = () => {
+    onChange({ ...cellOptions, applyToRow: !cellOptions.applyToRow });
+  };
+
+  const applyToRowSwitchId = useId();
+
+  return (
+    <>
+      <Field label="Background display mode">
+        <RadioButtonGroup
+          aria-label="Background display mode"
+          value={cellOptions?.mode ?? TableCellBackgroundDisplayMode.Gradient}
+          onChange={onCellOptionsChange}
+          options={colorBackgroundOpts}
+        />
+      </Field>
+
+      <Field
+        label="Apply to entire row"
+        description="If selected the entire row will be colored as this cell would be."
+      >
+        <Switch
+          id={applyToRowSwitchId}
+          label="Apply to entire row"
+          value={cellOptions.applyToRow}
+          onChange={onColorRowChange}
+        />
+      </Field>
+    </>
+  );
+};

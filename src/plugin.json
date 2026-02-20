@@ -1,0 +1,47 @@
+{
+  "$schema": "https://raw.githubusercontent.com/grafana/grafana/main/docs/sources/developers/plugins/plugin.schema.json",
+  "type": "panel",
+  "name": "Table with Column Grouping",
+  "id": "smelentyev-tablecolumngrouping-panel",
+  "info": {
+    "keywords": ["panel", "table", "grouped headers", "column grouping", "multi-level headers"],
+    "description": "Advanced table panel with support for multi-level column headers and flexible column grouping. Features include hierarchical header organization, customizable vertical and horizontal grouping, sorting, filtering, and column resizing capabilities.",
+    "author": {
+      "name": "Scooper"
+    },
+    "logos": {
+      "small": "img/logo.svg",
+      "large": "img/logo.svg"
+    },
+    "links": [
+      {
+        "name": "Repository",
+        "url": "https://github.com/Smelentyev/grafana-table-column-grouping"
+      },
+      {
+        "name": "Issue tracker",
+        "url": "https://github.com/Smelentyev/grafana-table-column-grouping/issues"
+      }
+    ],
+    "screenshots": [
+      {
+        "name": "Grouped headers: Sales and Profit",
+        "path": "img/screenshots/table-main.png"
+      },
+      {
+        "name": "Grouped table panel options",
+        "path": "img/screenshots/table-edit-options.png"
+      },
+      {
+        "name": "No data state",
+        "path": "img/screenshots/table-no-data.png"
+      }
+    ],
+    "version": "%VERSION%",
+    "updated": "%TODAY%"
+  },
+  "dependencies": {
+    "grafanaDependency": ">=11.6.0",
+    "plugins": []
+  }
+}

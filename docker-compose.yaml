@@ -1,0 +1,23 @@
+services:
+  grafana:
+    extends:
+      file: .config/docker-compose-base.yaml
+      service: grafana
+    environment:
+      # Разрешить загрузку неподписанных плагинов
+      - GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=smelentyev-tablecolumngrouping-panel
+      # Уровень логирования для отладки
+      - GF_LOG_LEVEL=debug
+      - GF_LOG_FILTERS=plugin.smelentyev-tablecolumngrouping-panel:debug
+      # Анонимный доступ для быстрого тестирования
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      # Отключить аналитику
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+    volumes:
+      # Монтирование собранного плагина
+      - ./dist:/var/lib/grafana/plugins/smelentyev-tablecolumngrouping-panel
+      # Монтирование конфигурации provisioning (если есть)
+      - ./provisioning:/etc/grafana/provisioning
+    restart: unless-stopped
