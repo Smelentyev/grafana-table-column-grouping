@@ -1,5 +1,3 @@
-import 'react-data-grid/lib/styles.css';
-
 import React, { CSSProperties, Key, ReactNode, useCallback, useMemo, useRef, useState, type JSX } from 'react';
 import { clsx } from 'clsx';
 import { memoize } from 'micro-memoize';
@@ -97,10 +95,12 @@ import {
   IS_SAFARI_26,
   getTextColorForBackground as _getTextColorForBackground,
 } from './utils';
+import { ensureReactDataGridStyles } from './reactDataGridStyles';
 
 const EXPANDED_COLUMN_KEY = 'expanded';
 
 export function TableNG(props: TableNGProps) {
+  ensureReactDataGridStyles();
   const {
     cellHeight,
     columnGrouping,

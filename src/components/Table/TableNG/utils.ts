@@ -18,6 +18,7 @@ import {
   DataFrame,
   DisplayProcessor,
   isDataFrame,
+  isDataFrameWithValue,
   FieldSparkline,
   DecimalCount,
 } from '@grafana/data';
@@ -742,8 +743,9 @@ const numCompare: Comparator = (a, b) => {
   return Number(a) - Number(b);
 };
 const frameCompare: Comparator = (a, b) => {
-  // @ts-ignore The compared vals are DataFrameWithValue. the value is the rendered stat (first, last, etc.)
-  return (a?.value ?? 0) - (b?.value ?? 0);
+  const aValue = isDataFrameWithValue(a) ? a.value ?? 0 : 0;
+  const bValue = isDataFrameWithValue(b) ? b.value ?? 0 : 0;
+  return aValue - bValue;
 };
 
 /**
