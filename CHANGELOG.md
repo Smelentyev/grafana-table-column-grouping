@@ -1,8 +1,8 @@
 # Changelog
 
-## 1.0.0 (Unreleased)
+## 1.0.1 (2026-02-20)
 
-Initial release with the following features:
+Initial public release with the following features:
 
 ### Features
 - Multi-level column headers with hierarchical organization

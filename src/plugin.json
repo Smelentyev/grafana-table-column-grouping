@@ -7,7 +7,7 @@
     "keywords": ["panel", "table", "grouped headers", "column grouping", "multi-level headers"],
     "description": "Advanced table panel with support for multi-level column headers and flexible column grouping. Features include hierarchical header organization, customizable vertical and horizontal grouping, sorting, filtering, and column resizing capabilities.",
     "author": {
-      "name": "Scooper"
+      "name": "Smelentyev"
     },
     "logos": {
       "small": "img/logo.svg",

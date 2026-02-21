@@ -1304,17 +1304,16 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
                               />
                             )}
                             <span>{cell.name}</span>
-                            {cell.field && sortColumns.some((sc) => sc.columnKey === getDisplayName(cell.field)) && (
-                              <Icon
-                                name={
-                                  sortColumns.find((sc) => sc.columnKey === getDisplayName(cell.field))?.direction ===
-                                  'ASC'
-                                    ? 'arrow-up'
-                                    : 'arrow-down'
+                            {cell.field &&
+                              (() => {
+                                const fieldName = getDisplayName(cell.field);
+                                const activeSort = sortColumns.find((sc) => sc.columnKey === fieldName);
+                                if (!activeSort) {
+                                  return null;
                                 }
-                                size="lg"
-                              />
-                            )}
+
+                                return <Icon name={activeSort.direction === 'ASC' ? 'arrow-up' : 'arrow-down'} size="lg" />;
+                              })()}
                             {cell.isFilterable && cell.field && (
                               <Filter
                                 name={getDisplayName(cell.field)}
