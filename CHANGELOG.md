@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.5 (2026-03-26)
+
+### Fixed
+- Reworked the GitHub release workflow to use the same build, sign, package, and validation steps that already pass in CI
+- Switched release publishing to a direct GitHub draft release upload flow with ZIP and SHA1 artifacts
+
 ## 1.0.4 (2026-03-26)
 
 ### Fixed
