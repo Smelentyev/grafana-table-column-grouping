@@ -1,27 +1,27 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { css, cx } from '@emotion/css';
 
-import { Field, GrafanaTheme2, SelectableValue } from '@grafana/data';
+import { DataFrame, Field, GrafanaTheme2, SelectableValue } from '@grafana/data';
 import { useStyles2, Icon, Popover } from '@grafana/ui';
-import { FilterType, TableRow } from '../types';
+import { FilterType } from '../types';
 
 import { REGEX_OPERATOR } from './FilterList';
 import { FilterPopup } from './FilterPopup';
 
 interface Props {
   name: string;
-  rows: TableRow[];
+  data: DataFrame;
   filter: FilterType;
   setFilter: React.Dispatch<React.SetStateAction<FilterType>>;
   field?: Field;
   crossFilterOrder: string[];
-  crossFilterRows: { [key: string]: TableRow[] };
+  crossFilterRows: { [key: string]: number[] };
   iconClassName?: string;
 }
 
 export const Filter = ({
   name,
-  rows,
+  data,
   filter,
   setFilter,
   field,
@@ -31,23 +31,26 @@ export const Filter = ({
 }: Props) => {
   const filterValue = filter[name]?.filtered;
 
-  // get rows for cross filtering
-  const filterIndex = crossFilterOrder.indexOf(name);
-  let filteredRows: TableRow[];
-  if (filterIndex > 0) {
-    // current filter list should be based on the previous filter list
-    const previousFilterName = crossFilterOrder[filterIndex - 1];
-    filteredRows = crossFilterRows[previousFilterName];
-  } else if (filterIndex === -1 && crossFilterOrder.length > 0) {
-    // current filter list should be based on the last filter list
-    const previousFilterName = crossFilterOrder[crossFilterOrder.length - 1];
-    filteredRows = crossFilterRows[previousFilterName];
-  } else {
-    filteredRows = rows;
-  }
-
   const [buttonElement, setButtonElement] = useState<HTMLButtonElement | null>(null);
   const [isPopoverVisible, setPopoverVisible] = useState<boolean>(false);
+
+  // Determine the index set to show in the popup for cross-filtering.
+  // Only computed when the popup is open — avoids building an N-element array per
+  // filterable column on every data refresh when no popup is visible.
+  const filteredIndices = useMemo(() => {
+    if (!isPopoverVisible) {
+      return [];
+    }
+    const filterIndex = crossFilterOrder.indexOf(name);
+    if (filterIndex > 0) {
+      return crossFilterRows[crossFilterOrder[filterIndex - 1]] ?? [];
+    }
+    if (filterIndex === -1 && crossFilterOrder.length > 0) {
+      return crossFilterRows[crossFilterOrder[crossFilterOrder.length - 1]] ?? [];
+    }
+    // No active cross-filters ahead of this one — show all rows.
+    return Array.from({ length: data.length }, (_, i) => i);
+  }, [isPopoverVisible, name, crossFilterOrder, crossFilterRows, data.length]);
   const styles = useStyles2(getStyles);
   const filterEnabled = Boolean(filterValue);
   const [searchFilter, setSearchFilter] = useState(filter[name]?.searchFilter || '');
@@ -70,7 +73,7 @@ export const Filter = ({
           content={
             <FilterPopup
               name={name}
-              rows={filteredRows}
+              indices={filteredIndices}
               filterValue={filterValue}
               setFilter={setFilter}
               field={field}

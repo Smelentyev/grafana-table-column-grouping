@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import { DataFrame, GrafanaTheme2, Field, FieldType } from '@grafana/data';
-import { useStyles2, useTheme2, DataLinksContextMenu, Icon, Pagination } from '@grafana/ui';
+import { useStyles2, DataLinksContextMenu, Icon, Pagination } from '@grafana/ui';
 import { css, cx } from '@emotion/css';
 import { SortColumn } from 'react-data-grid';
 import {
@@ -16,6 +16,7 @@ import { TableCellInspector } from '../TableCellInspector';
 import { TableCellActions } from './components/TableCellActions';
 import { Filter } from './Filter/Filter';
 import { applySort, getColumnTypes, getDisplayName } from './utils';
+import { filterIndices, buildCellPlanByDepth, ColumnInfo, CellPlan } from './pipelineUtils';
 
 interface TableWithGroupedHeadersProps extends TableNGProps {
   columnGrouping: ColumnGroupingSettings;
@@ -30,11 +31,6 @@ interface HeaderCell {
   field?: Field;
   isSortable: boolean;    // Only for leaf headers with field
   isFilterable: boolean;  // Controlled by "Column filter"
-}
-
-interface ColumnInfo {
-  // Fields to display in this column (main field + subgroup fields)
-  fields: Field[];
 }
 
 // Helper function to get field type icon
@@ -55,39 +51,6 @@ function getFieldTypeIcon(field: Field): string {
   }
 }
 
-// Convert DataFrame to TableRow[]
-function frameToTableRows(frame: DataFrame): TableRow[] {
-  const rows: TableRow[] = [];
-  for (let i = 0; i < frame.length; i++) {
-    const row: TableRow = { __depth: 0, __index: i };
-    frame.fields.forEach(field => {
-      row[getDisplayName(field)] = field.values[i];
-    });
-    rows.push(row);
-  }
-  return rows;
-}
-
-// Convert TableRow[] back to DataFrame
-function tableRowsToFrame(rows: TableRow[], originalFrame: DataFrame): DataFrame {
-  const newFields = originalFrame.fields.map(field => {
-    const values: any[] = [];
-    rows.forEach(row => {
-      const index = row.__index;
-      values.push(field.values[index]);
-    });
-    return {
-      ...field,
-      values,
-    };
-  });
-
-  return {
-    ...originalFrame,
-    fields: newFields,
-    length: rows.length,
-  };
-}
 
 const getStyles = (theme: GrafanaTheme2) => ({
   container: css`
@@ -116,6 +79,11 @@ const getStyles = (theme: GrafanaTheme2) => ({
       border-top: 1px solid ${theme.colors.border.medium};
     }
   `,
+  stickyThead: css`
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  `,
   headerCell: css`
     padding: ${theme.spacing(1)} ${theme.spacing(2)};
     text-align: center;
@@ -124,10 +92,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
     border-right: 1px solid ${theme.colors.border.medium};
     border-bottom: 1px solid ${theme.colors.border.medium};
     background-color: ${theme.colors.background.secondary};
-    position: sticky;
-    z-index: 2;
-    box-sizing: border-box;
     position: relative;
+    box-sizing: border-box;
 
     &:first-child {
       border-left: 1px solid ${theme.colors.border.medium};
@@ -452,9 +418,8 @@ const getAllColumnsFromGroupItem = (item: GroupChild): string[] => {
 };
 
 export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (props) => {
-  const { data, columnGrouping, height, noHeader, onCellFilterAdded, onColumnResize, showTypeIcons, enablePagination } = props;
+  const { data, columnGrouping, height, noHeader, onCellFilterAdded, onColumnResize, showTypeIcons, enablePagination, paginationPageSize } = props;
   const styles = useStyles2(getStyles);
-  const theme = useTheme2();
   const [inspectCell, setInspectCell] = useState<InspectCellProps | null>(null);
 
   const isColumnFilterEnabled = useCallback((field: Field) => {
@@ -481,38 +446,40 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
   // State for column resizing
   const [columnWidths, setColumnWidths] = useState<Map<number, number>>(new Map());
   const [resizingColumn, setResizingColumn] = useState<number | null>(null);
-  const [resizeStartX, setResizeStartX] = useState<number>(0);
-  const [resizeStartWidth, setResizeStartWidth] = useState<number>(0);
+  const resizeStartXRef = React.useRef<number>(0);
+  const resizeStartWidthRef = React.useRef<number>(0);
+  // resizingHeaderRef: used only to read offsetWidth at drag start
+  const resizingHeaderRef = React.useRef<HTMLElement | null>(null);
+  const pendingWidthRef = React.useRef<number | null>(null);
+  // colElemsRef: direct refs to <col> elements; updated during drag to resize the full column
+  const colElemsRef = React.useRef<(HTMLTableColElement | null)[]>([]);
 
-  // Create tableRows for filtering
-  const tableRows = useMemo((): TableRow[] => {
-    const rows: TableRow[] = [];
-    for (let i = 0; i < data.length; i++) {
-      const row: TableRow = { __depth: 0, __index: i };
-      data.fields.forEach(field => {
-        row[getDisplayName(field)] = field.values[i];
-      });
-      rows.push(row);
-    }
-    return rows;
-  }, [data]);
-
-  // Calculate cross-filtered rows for filter component
+  // Build cross-filter index chains without allocating row objects.
+  // Each entry contains the indices that pass all filters up to and including that key.
   const crossFilterRows = useMemo(() => {
-    const result: { [key: string]: TableRow[] } = {};
+    const result: { [key: string]: number[] } = {};
+    if (crossFilterOrder.length === 0) {
+      return result;
+    }
 
-    // Incremental filtering to avoid O(K^2 * N) behavior when multiple filters are applied.
-    let prefixRows = tableRows;
+    const fieldByName = new Map<string, Field>();
+    for (const f of data.fields) {
+      fieldByName.set(getDisplayName(f), f);
+    }
+
+    // Start with all row indices, then progressively narrow per active filter.
+    let prefixIndices: number[] = Array.from({ length: data.length }, (_, i) => i);
     for (const fieldName of crossFilterOrder) {
       const filterValue = filter[fieldName];
-      if (filterValue?.filteredSet?.size) {
-        prefixRows = prefixRows.filter((row) => filterValue.filteredSet.has(String(row[fieldName] ?? '')));
+      const field = fieldByName.get(fieldName);
+      if (filterValue?.filteredSet?.size && field) {
+        prefixIndices = prefixIndices.filter((i) => filterValue.filteredSet.has(String(field.values[i] ?? '')));
       }
-      result[fieldName] = prefixRows;
+      result[fieldName] = prefixIndices;
     }
 
     return result;
-  }, [tableRows, filter, crossFilterOrder]);
+  }, [data, filter, crossFilterOrder]);
 
   // Handler for sorting
   const handleHeaderClick = useCallback((cell: HeaderCell) => {
@@ -543,10 +510,11 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
       return;
     }
 
-    const currentWidth = headerCell.offsetWidth;
+    resizingHeaderRef.current = headerCell;
+    resizeStartXRef.current = event.clientX;
+    resizeStartWidthRef.current = headerCell.offsetWidth;
+    pendingWidthRef.current = null;
     setResizingColumn(columnIndex);
-    setResizeStartX(event.clientX);
-    setResizeStartWidth(currentWidth);
   };
 
   const handleResizeMove = React.useCallback((event: MouseEvent) => {
@@ -554,30 +522,40 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
       return;
     }
 
-    const deltaX = event.clientX - resizeStartX;
-    const newWidth = Math.max(50, resizeStartWidth + deltaX);
+    const deltaX = event.clientX - resizeStartXRef.current;
+    const newWidth = Math.max(50, resizeStartWidthRef.current + deltaX);
 
-    setColumnWidths((prev) => {
-      const newWidths = new Map(prev);
-      newWidths.set(resizingColumn, newWidth);
-      return newWidths;
-    });
-  }, [resizingColumn, resizeStartX, resizeStartWidth]);
+    // Write to <col> — propagates immediately to the full column (all header rows + tbody)
+    // without triggering any React re-render during the drag gesture.
+    const col = colElemsRef.current[resizingColumn];
+    if (col) {
+      col.style.width = `${newWidth}px`;
+    }
+    pendingWidthRef.current = newWidth;
+  }, [resizingColumn]);
 
   const handleResizeEnd = React.useCallback(() => {
-    if (resizingColumn !== null && onColumnResize && columns) {
-      const newWidth = columnWidths.get(resizingColumn);
-      if (newWidth) {
-        // Find the field name for this column
-        const column = columns[resizingColumn];
-        if (column && column.fields.length > 0) {
-          onColumnResize(column.fields[0].name, newWidth);
+    if (resizingColumn !== null) {
+      const newWidth = pendingWidthRef.current;
+      if (newWidth !== null) {
+        setColumnWidths((prev) => {
+          const next = new Map(prev);
+          next.set(resizingColumn, newWidth);
+          return next;
+        });
+        if (onColumnResize && columns) {
+          const column = columns[resizingColumn];
+          if (column && column.fields.length > 0) {
+            onColumnResize(column.fields[0].name, newWidth);
+          }
         }
       }
     }
     setResizingColumn(null);
+    resizingHeaderRef.current = null;
+    pendingWidthRef.current = null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resizingColumn, columnWidths, onColumnResize]);
+  }, [resizingColumn, onColumnResize]);
 
   // Add event listeners for resize
   React.useEffect(() => {
@@ -590,8 +568,7 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
       };
     }
     return undefined;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resizingColumn, resizeStartX, resizeStartWidth, columnWidths]);
+  }, [resizingColumn, handleResizeMove, handleResizeEnd]);
 
   // Process new GroupItem structure
   const processNewGroupStructure = (
@@ -642,7 +619,7 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
       if (rootGroup && !processedRootGroups.has(rootGroup)) {
         // This field is the main column of a RootGroup - process the entire group
         const startColumnIndex = columnsList.length;
-        processGroupItem(rootGroup, startColumnIndex, 0, originalData, rows, columnsList);
+        processGroupItem(rootGroup, startColumnIndex, 0, originalData, rows, columnsList, maxDepth);
         processedRootGroups.add(rootGroup);
       } else if (!groupedFieldNames.has(field.name) && !groupedFieldNames.has(getDisplayName(field))) {
         // This is an ungrouped field - add it at its original position
@@ -679,7 +656,8 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
     startLevel: number,
     originalData: DataFrame,
     rows: HeaderCell[][],
-    columnsList: ColumnInfo[]
+    columnsList: ColumnInfo[],
+    maxDepth: number
   ): number => {
     // Number of columns this item will occupy
     const colCount = getGroupItemColumnCount(item);
@@ -691,11 +669,11 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
         return 0;
       }
 
-      // Add header
+      // Add header - leaf cell spans remaining rows down to maxDepth
       rows[startLevel].push({
         name: getDisplayName(field),
         colSpan: 1,
-        rowSpan: 1,
+        rowSpan: maxDepth - startLevel,
         level: startLevel,
         columnIndex: startColumnIndex,
         field: field,
@@ -721,10 +699,13 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
       // Add header for root group
       // RootGroup headers are filterable only if "Column filter" is enabled for the field
       const isFilterable = isColumnFilterEnabled(field);
+      // An empty root-group has no children to fill the rows below it, so its header must
+      // span all remaining header rows — exactly like an ungrouped leaf column does.
+      const rowSpan = item.children.length === 0 ? maxDepth - startLevel : 1;
       rows[startLevel].push({
         name: getDisplayName(field),
         colSpan: colCount,
-        rowSpan: 1,
+        rowSpan,
         level: startLevel,
         columnIndex: startColumnIndex,
         field: field,
@@ -767,9 +748,12 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
           let currentLevel = startLevel + 1;
 
           // Process all children sequentially (vertical stacking)
-          item.children.forEach((child) => {
+          item.children.forEach((child, childIdx) => {
+            const isLastChild = childIdx === item.children.length - 1;
             if (child.type === 'group-container' && child.orientation === 'horizontal') {
-              // Horizontal Group: add headers and fields for each grandchild at current level
+              // Horizontal Group: add headers and fields for each grandchild at current level.
+              // Grandchildren are leaf cells at this level; if this group is last, they fill to maxDepth.
+              const grandchildBottom = isLastChild ? maxDepth : currentLevel + 1;
               child.children.forEach((grandchild, idx) => {
                 // Add grandchild fields to corresponding column
                 const columnFields = columnsList[startColumnIndex + idx].fields;
@@ -777,7 +761,7 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
                 columnFields.push(...childFields);
 
                 // Add header for grandchild
-                addChildHeaders(grandchild, startColumnIndex + idx, currentLevel, originalData, rows);
+                addChildHeaders(grandchild, startColumnIndex + idx, currentLevel, originalData, rows, grandchildBottom);
               });
               currentLevel += 1;
             } else if (child.type === 'column') {
@@ -789,13 +773,14 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
                 columnFields.push(...childFields);
               }
 
-              // Add header with colspan
+              // rowSpan: if this is the last child and the group is shallower than maxDepth, fill down
+              const childBottom = isLastChild ? maxDepth : currentLevel + 1;
               const childField = findFieldById(originalData.fields, child.column);
               if (childField) {
                 rows[currentLevel].push({
                   name: getDisplayName(childField),
                   colSpan: totalColumns,
-                  rowSpan: 1,
+                  rowSpan: childBottom - currentLevel,
                   level: currentLevel,
                   columnIndex: startColumnIndex,
                   field: childField,
@@ -817,12 +802,14 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
 
           // Process children vertically
           let currentLevel = startLevel + 1;
-          item.children.forEach((child) => {
+          item.children.forEach((child, index) => {
             const childFields = collectFieldsFromItem(child, originalData);
             columnFields.push(...childFields);
 
-            // Add child headers
-            addChildHeaders(child, startColumnIndex, currentLevel, originalData, rows);
+            // Add child headers: last child fills down to maxDepth, others fill only their own depth
+            const isLast = index === item.children.length - 1;
+            const childBottom = isLast ? maxDepth : currentLevel + getGroupItemDepth(child);
+            addChildHeaders(child, startColumnIndex, currentLevel, originalData, rows, childBottom);
 
             // Move to next level
             currentLevel += getGroupItemDepth(child);
@@ -854,7 +841,8 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
             startLevel, // FIXED: Use startLevel (not startLevel + 1) - children on same level
             originalData,
             rows,
-            columnsList
+            columnsList,
+            maxDepth
           );
           currentColumnIndex += columnsAdded;
           totalColumnsAdded += columnsAdded;
@@ -893,7 +881,7 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
             });
 
             // Add child headers
-            addChildHeaders(child, currentColumnIndex, startLevel, originalData, rows);
+            addChildHeaders(child, currentColumnIndex, startLevel, originalData, rows, maxDepth);
 
             currentColumnIndex += getGroupItemColumnCount(child);
           });
@@ -912,8 +900,10 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
 
         // Add child headers vertically
         let currentLevel = startLevel;
-        item.children.forEach((child) => {
-          addChildHeaders(child, startColumnIndex, currentLevel, originalData, rows);
+        item.children.forEach((child, index) => {
+          const isLast = index === item.children.length - 1;
+          const childBottom = isLast ? maxDepth : currentLevel + getGroupItemDepth(child);
+          addChildHeaders(child, startColumnIndex, currentLevel, originalData, rows, childBottom);
           currentLevel += getGroupItemDepth(child);
         });
 
@@ -935,7 +925,8 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
             startLevel,
             originalData,
             rows,
-            columnsList
+            columnsList,
+            maxDepth
           );
           currentColumnIndex += columnsAdded;
           totalColumnsAdded += columnsAdded;
@@ -963,13 +954,17 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
     return fields;
   };
 
-  // Helper to add headers for a child item
+  // Helper to add headers for a child item.
+  // bottomLevel: the header row index (exclusive) this cell's subtree should fill down to.
+  // For the last child in a shorter vertical branch bottomLevel === maxDepth, causing rowSpan > 1.
+  // For non-last children bottomLevel === startLevel + getGroupItemDepth(child), so rowSpan === 1.
   const addChildHeaders = (
     item: GroupChild,
     columnIndex: number,
     startLevel: number,
     originalData: DataFrame,
-    rows: HeaderCell[][]
+    rows: HeaderCell[][],
+    bottomLevel: number
   ) => {
     if (item.type === 'column') {
       const field = findFieldById(originalData.fields, item.column);
@@ -977,7 +972,7 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
         rows[startLevel].push({
           name: getDisplayName(field),
           colSpan: 1,
-          rowSpan: 1,
+          rowSpan: bottomLevel - startLevel,
           level: startLevel,
           columnIndex: columnIndex,
           field: field,
@@ -1002,8 +997,10 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
         // Add children headers if vertical
         if (item.orientation === 'vertical' && item.children.length > 0) {
           let currentLevel = startLevel + 1;
-          item.children.forEach((child) => {
-            addChildHeaders(child, columnIndex, currentLevel, originalData, rows);
+          item.children.forEach((child, index) => {
+            const isLast = index === item.children.length - 1;
+            const childBottom = isLast ? bottomLevel : currentLevel + getGroupItemDepth(child);
+            addChildHeaders(child, columnIndex, currentLevel, originalData, rows, childBottom);
             currentLevel += getGroupItemDepth(child);
           });
         }
@@ -1017,77 +1014,42 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
       if (item.orientation === 'vertical') {
         // Vertical: children stack in the same column
         let currentLevel = startLevel;
-        item.children.forEach((child) => {
-          addChildHeaders(child, columnIndex, currentLevel, originalData, rows);
+        item.children.forEach((child, index) => {
+          const isLast = index === item.children.length - 1;
+          const childBottom = isLast ? bottomLevel : currentLevel + getGroupItemDepth(child);
+          addChildHeaders(child, columnIndex, currentLevel, originalData, rows, childBottom);
           currentLevel += getGroupItemDepth(child);
         });
       } else {
-        // Horizontal: children are in different columns
+        // Horizontal: children are in different columns, all share the same bottomLevel
         let currentColumnIndex = columnIndex;
         item.children.forEach((child) => {
-          addChildHeaders(child, currentColumnIndex, startLevel, originalData, rows);
+          addChildHeaders(child, currentColumnIndex, startLevel, originalData, rows, bottomLevel);
           currentColumnIndex += getGroupItemColumnCount(child);
         });
       }
     }
   };
 
-  // Apply filtering and sorting to data
-  const filteredAndSortedData = useMemo(() => {
-    let result = data;
-    const fieldByDisplayName = new Map<string, Field>();
-    for (const field of data.fields) {
-      fieldByDisplayName.set(getDisplayName(field), field);
-      fieldByDisplayName.set(field.name, field);
-    }
+  // Build filtered+sorted row index array — no field.values copies, no intermediate DataFrame
+  const filteredSortedIndices = useMemo(() => {
+    // Step 1: filter via extracted pure function (testable independently)
+    let indices = filterIndices(data, filter);
 
-    // Apply filter
-    if (Object.keys(filter).length > 0) {
-      const rowIndices: number[] = [];
-
-      for (let rowIndex = 0; rowIndex < data.length; rowIndex++) {
-        let matchesAllFilters = true;
-
-        for (const [fieldName, filterValue] of Object.entries(filter)) {
-          const field = fieldByDisplayName.get(fieldName);
-          if (!field) {
-            continue;
-          }
-
-          const value = String(field.values[rowIndex] ?? '');
-
-          if (filterValue.filteredSet.size > 0 && !filterValue.filteredSet.has(value)) {
-            matchesAllFilters = false;
-            break;
-          }
-        }
-
-        if (matchesAllFilters) {
-          rowIndices.push(rowIndex);
-        }
-      }
-
-      // Create filtered frame
-      const filteredFields = data.fields.map((field) => ({
-        ...field,
-        values: rowIndices.map((i) => field.values[i]),
-      }));
-
-      result = {
-        ...data,
-        fields: filteredFields,
-        length: rowIndices.length,
-      };
-    }
-
-    // Apply sorting// Group headers are not sortable
+    // Step 2: sort — build temp rows only from filtered subset, then extract sorted indices
     if (sortColumns.length > 0) {
-      const rows = frameToTableRows(result);
-      const sorted = applySort(rows, result.fields, sortColumns, columnTypes, false);
-      result = tableRowsToFrame(sorted, result);
+      const tempRows: TableRow[] = indices.map((i) => {
+        const row: TableRow = { __depth: 0, __index: i };
+        for (const field of data.fields) {
+          row[getDisplayName(field)] = field.values[i];
+        }
+        return row;
+      });
+      const sorted = applySort(tempRows, data.fields, sortColumns, columnTypes, false);
+      indices = sorted.map((row) => row.__index as number);
     }
 
-    return result;
+    return indices;
   }, [data, filter, sortColumns, columnTypes]);
 
   // Build the header structure and column mapping
@@ -1127,24 +1089,18 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
   }, [data, columnGrouping]);
 
   // Render table with filtered data
-  const numRows = filteredAndSortedData.length;
+  const numRows = filteredSortedIndices.length;
   const maxFieldDepth = useMemo(() => Math.max(...columns.map((col) => col.fields.length), 1), [columns]);
 
-  // Pagination for grouped header mode: avoids rendering thousands of <tr>/<td> nodes at once.
+  // Pagination in grouped mode is explicit: it is enabled only via panel options.
   const [page, setPage] = useState(0);
-  const paginationEnabled = Boolean(enablePagination) || numRows > 2000;
+  const paginationEnabled = Boolean(enablePagination);
   const rowsPerPage = useMemo(() => {
-    // Estimate row heights conservatively; grouped view can render multiple sub-rows per record.
-    const lineHeight = theme.typography.fontSize * theme.typography.body.lineHeight;
-    const headerRowEstimate = lineHeight + theme.spacing.gridSize * 2; // padding: theme.spacing(1) top/bottom
-    const cellRowEstimate = lineHeight + theme.spacing.gridSize; // padding: theme.spacing(0.5) top/bottom
-    const paginationEstimate = theme.spacing.gridSize * (theme.components.height.md + 1);
-
-    const headerEstimate = hasHeader && headerRows.length > 0 ? headerRows.length * headerRowEstimate : 0;
-    const available = Math.max(0, height - headerEstimate - paginationEstimate);
-    const perRecord = Math.max(1, maxFieldDepth) * cellRowEstimate;
-    return Math.max(1, Math.floor(available / perRecord));
-  }, [hasHeader, headerRows.length, height, maxFieldDepth, theme]);
+    if (paginationPageSize && paginationPageSize > 0) {
+      return paginationPageSize;
+    }
+    return 100;
+  }, [paginationPageSize]);
   const numPages = useMemo(
     () => (paginationEnabled ? Math.ceil(numRows / rowsPerPage) : 1),
     [numRows, rowsPerPage, paginationEnabled]
@@ -1188,69 +1144,13 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
     return indices;
   }, [numRows, page, rowsPerPage, paginationEnabled]);
 
-  const filteredFieldByName = useMemo(() => {
-    const map = new Map<string, Field>();
-    for (const f of filteredAndSortedData.fields) {
-      map.set(getDisplayName(f), f);
-      map.set(f.name, f);
-    }
-    return map;
-  }, [filteredAndSortedData.fields]);
+  // Cleared whenever `data` is replaced; filled lazily as cells are rendered.
+  const displayValueCache = useMemo(() => new Map<string, string>(), [data]);
 
-  type CellPlan = {
-    colIndex: number;
-    fieldKey: string;
-    colSpan: number;
-    rowSpan: number;
-  };
-
-  const cellPlanByDepth = useMemo(() => {
-    const plans: CellPlan[][] = Array.from({ length: maxFieldDepth }, () => []);
-    for (let depth = 0; depth < maxFieldDepth; depth++) {
-      let colIndex = 0;
-      while (colIndex < columns.length) {
-        const col = columns[colIndex];
-        // Single-field columns are rendered once with rowspan.
-        if (col.fields.length === 1 && depth > 0) {
-          colIndex += 1;
-          continue;
-        }
-        if (depth >= col.fields.length) {
-          colIndex += 1;
-          continue;
-        }
-
-        const field = col.fields[depth];
-        const fieldKey = getDisplayName(field);
-
-        // If this field was already rendered in the previous column (via colspan), skip.
-        if (
-          colIndex > 0 &&
-          columns[colIndex - 1].fields.length > depth &&
-          getDisplayName(columns[colIndex - 1].fields[depth]) === fieldKey
-        ) {
-          colIndex += 1;
-          continue;
-        }
-
-        // Compute colspan (consecutive columns that repeat the same field at this depth).
-        let colSpan = 1;
-        for (let next = colIndex + 1; next < columns.length; next++) {
-          const nextCol = columns[next];
-          if (nextCol.fields.length > depth && getDisplayName(nextCol.fields[depth]) === fieldKey) {
-            colSpan += 1;
-          } else {
-            break;
-          }
-        }
-
-        const rowSpan = col.fields.length === 1 && maxFieldDepth > 1 && depth === 0 ? maxFieldDepth : 1;
-        plans[depth].push({ colIndex, fieldKey, colSpan, rowSpan });
-        colIndex += colSpan;
-      }
-    }
-    return plans;
-  }, [columns, maxFieldDepth]);
+  const cellPlanByDepth = useMemo<CellPlan[][]>(
+    () => buildCellPlanByDepth(columns, maxFieldDepth),
+    [columns, maxFieldDepth]
+  );
 
   // Check if grouping is enabled and has new rootGroups
   const hasGroups = columnGrouping.rootGroups && columnGrouping.rootGroups.length > 0;
@@ -1263,19 +1163,29 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
     <div className={styles.container} style={{ height }}>
       <div className={styles.tableScroll}>
         <table className={styles.table}>
+          {/* <colgroup> is the single source of truth for column widths with table-layout:fixed.
+              During resize we write directly to the matching <col> element so that the full
+              column (every header row + every body row) updates instantly with zero React renders. */}
+          <colgroup>
+            {columns.map((_, i) => {
+              const w = columnWidths.get(i);
+              return (
+                <col
+                  key={i}
+                  ref={(el) => { colElemsRef.current[i] = el; }}
+                  style={w ? { width: `${w}px` } : undefined}
+                />
+              );
+            })}
+          </colgroup>
           {hasHeader && (
-            <thead>
+            <thead className={styles.stickyThead}>
               {headerRows.map((row, rowIndex) => (
                 <tr key={rowIndex} className={styles.headerRow}>
                   {row
                     .sort((a, b) => a.columnIndex - b.columnIndex)
                     .map((cell, cellIndex) => {
                       const wrapHeaderText = cell.field?.config?.custom?.wrapHeaderText;
-
-                      // Apply width only to cells that span multiple rows (ungrouped columns)
-                      // or cells at level 0 (top level headers in groups)
-                      const shouldApplyWidth = cell.rowSpan > 1 || cell.level === 0;
-                      const columnWidth = shouldApplyWidth ? columnWidths.get(cell.columnIndex) : undefined;
 
                       return (
                         <th
@@ -1288,11 +1198,6 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
                             cell.isSortable && styles.headerCellClickable
                           )}
                           onClick={() => cell.isSortable && handleHeaderClick(cell)}
-                          style={{
-                            width: columnWidth ? `${columnWidth}px` : undefined,
-                            minWidth: columnWidth ? `${columnWidth}px` : undefined,
-                            maxWidth: columnWidth ? `${columnWidth}px` : undefined,
-                          }}
                         >
                           <div className={styles.headerCellContent}>
                             {showTypeIcons && cell.field && (
@@ -1317,7 +1222,7 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
                             {cell.isFilterable && cell.field && (
                               <Filter
                                 name={getDisplayName(cell.field)}
-                                rows={tableRows}
+                                data={data}
                                 filter={filter}
                                 setFilter={setFilter}
                                 field={cell.field}
@@ -1343,17 +1248,33 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
               .map((rowIndex) =>
                 Array.from({ length: maxFieldDepth }).map((_, fieldDepth) => (
                   <tr key={`${rowIndex}-${fieldDepth}`} className={styles.dataRow}>
-                    {cellPlanByDepth[fieldDepth].map(({ colIndex, fieldKey, colSpan, rowSpan }) => {
-                      const columnWidth = columnWidths.get(colIndex);
-                      const filteredField = filteredFieldByName.get(fieldKey);
+                    {cellPlanByDepth[fieldDepth].map(({ colIndex, field: filteredField, colSpan, rowSpan, isPlaceholder }) => {
+                      // Alignment-only placeholder — keeps column structure when a multi-field
+                      // column has fewer fields than maxFieldDepth.
+                      if (isPlaceholder) {
+                        return (
+                          <td
+                            key={`${fieldDepth}-${colIndex}-empty`}
+                            className={styles.dataCell}
+                            colSpan={colSpan}
+                          />
+                        );
+                      }
+
                       if (!filteredField) {
                         return null;
                       }
 
-                      const value = filteredField.values[rowIndex];
-                      const displayValue = filteredField.display
-                        ? filteredField.display(value).text
-                        : String(value ?? '');
+                      const originalRowIndex = filteredSortedIndices[rowIndex];
+                      const value = filteredField.values[originalRowIndex];
+                      const cacheKey = `${filteredField.name}:${originalRowIndex}`;
+                      let displayValue = displayValueCache.get(cacheKey);
+                      if (displayValue === undefined) {
+                        displayValue = filteredField.display
+                          ? filteredField.display(value).text
+                          : String(value ?? '');
+                        displayValueCache.set(cacheKey, displayValue);
+                      }
                       const isFilterable = isColumnFilterEnabled(filteredField);
                       const showFilters = Boolean(onCellFilterAdded && isFilterable);
                       const cellInspect = filteredField.config?.custom?.inspect;
@@ -1361,7 +1282,7 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
                       const wrapText = filteredField.config?.custom?.wrapText;
 
                       const links = filteredField.getLinks
-                        ? filteredField.getLinks({ valueRowIndex: rowIndex })
+                        ? filteredField.getLinks({ valueRowIndex: originalRowIndex })
                         : undefined;
                       const hasLinks = Boolean(links && links.length > 0);
 
@@ -1394,11 +1315,6 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
                           className={styles.dataCell}
                           colSpan={colSpan}
                           rowSpan={rowSpan}
-                          style={{
-                            width: columnWidth ? `${columnWidth}px` : undefined,
-                            minWidth: columnWidth ? `${columnWidth}px` : undefined,
-                            maxWidth: columnWidth ? `${columnWidth}px` : undefined,
-                          }}
                         >
                           {hasLinks ? (
                             <DataLinksContextMenu links={() => links!} style={{}}>

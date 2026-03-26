@@ -122,6 +122,7 @@ export interface BaseTableProps {
   footerValues?: FooterItem[];
   frozenColumns?: number;
   enablePagination?: boolean;
+  paginationPageSize?: number;
   cellHeight?: TableCellHeight;
   maxRowHeight?: number;
   structureRev?: number;

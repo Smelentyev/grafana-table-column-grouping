@@ -34,7 +34,7 @@ export interface FilteredRowsResult {
   filter: FilterType;
   setFilter: React.Dispatch<React.SetStateAction<FilterType>>;
   crossFilterOrder: string[];
-  crossFilterRows: Record<string, TableRow[]>;
+  crossFilterRows: Record<string, number[]>;
 }
 
 export interface FilteredRowsOptions {
@@ -64,9 +64,9 @@ export function useFilteredRows(
         if (!value.filteredSet.has(displayedValue)) {
           return false;
         }
-        // collect rows for crossFilter
+        // collect indices for crossFilter (cheaper than storing full row objects)
         crossFilterRows[key] = crossFilterRows[key] ?? [];
-        crossFilterRows[key].push(row);
+        crossFilterRows[key].push(row.__index as number);
       }
       return true;
     };
@@ -138,6 +138,7 @@ export interface PaginatedRowsOptions {
   footerHeight: number;
   paginationHeight?: number;
   enabled: boolean;
+  pageSize?: number;
 }
 
 export interface PaginatedRowsResult {
@@ -156,7 +157,7 @@ const PAGINATION_HEIGHT = 38;
 
 export function usePaginatedRows(
   rows: TableRow[],
-  { height, width, headerHeight, footerHeight, rowHeight, enabled }: PaginatedRowsOptions
+  { height, width, headerHeight, footerHeight, rowHeight, enabled, pageSize }: PaginatedRowsOptions
 ): PaginatedRowsResult {
   // TODO: allow persisted page selection via url
   const [page, setPage] = useState(0);
@@ -195,11 +196,14 @@ export function usePaginatedRows(
       return { numPages: 0, rowsPerPage: 0, pageRangeStart: 1, pageRangeEnd: numRows };
     }
 
-    // calculate number of rowsPerPage based on height stack
-    const rowAreaHeight = height - headerHeight - footerHeight - PAGINATION_HEIGHT;
-    const heightPerRow = Math.floor(rowAreaHeight / (avgRowHeight || 1));
-    // ensure at least one row per page is displayed
-    let rowsPerPage = heightPerRow > 1 ? heightPerRow : 1;
+    let rowsPerPage = pageSize && pageSize > 0 ? pageSize : 0;
+    if (rowsPerPage === 0) {
+      // calculate number of rowsPerPage based on height stack
+      const rowAreaHeight = height - headerHeight - footerHeight - PAGINATION_HEIGHT;
+      const heightPerRow = Math.floor(rowAreaHeight / (avgRowHeight || 1));
+      // ensure at least one row per page is displayed
+      rowsPerPage = heightPerRow > 1 ? heightPerRow : 1;
+    }
 
     // calculate row range for pagination summary display
     const pageRangeStart = page * rowsPerPage + 1;
@@ -215,7 +219,7 @@ export function usePaginatedRows(
       pageRangeStart,
       pageRangeEnd,
     };
-  }, [height, headerHeight, footerHeight, avgRowHeight, enabled, numRows, page]);
+  }, [height, headerHeight, footerHeight, avgRowHeight, enabled, numRows, page, pageSize]);
 
   // safeguard against page overflow on panel resize or other factors
   useLayoutEffect(() => {

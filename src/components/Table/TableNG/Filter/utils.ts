@@ -1,19 +1,15 @@
 import { Field, formattedValueToString, SelectableValue } from '@grafana/data';
 
-import { TableRow } from '../types';
-import { getDisplayName } from '../utils';
-
-export function calculateUniqueFieldValues(rows: TableRow[], field?: Field) {
-  if (!field || rows.length === 0) {
+export function calculateUniqueFieldValues(indices: number[], field?: Field) {
+  if (!field || indices.length === 0) {
     return {};
   }
 
   const set: Record<string, string> = {};
 
-  for (let index = 0; index < rows.length; index++) {
-    const row = rows[index];
-    const fieldValue = row[getDisplayName(field)];
-    const value = field.display ? formattedValueToString(field.display(fieldValue)) : String(fieldValue);
+  for (let i = 0; i < indices.length; i++) {
+    const fieldValue = field.values[indices[i]];
+    const value = field.display ? formattedValueToString(field.display(fieldValue)) : String(fieldValue ?? '');
 
     set[value || '(Blanks)'] = value;
   }

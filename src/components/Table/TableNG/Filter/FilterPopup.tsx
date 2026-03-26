@@ -3,7 +3,7 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 
 import { Field, GrafanaTheme2, SelectableValue } from '@grafana/data';
 import { useStyles2, useTheme2, Button, ClickOutsideWrapper, FilterInput, Label, Stack, Select } from '@grafana/ui';
-import { FilterType, TableRow } from '../types';
+import { FilterType } from '../types';
 import { getDisplayName } from '../utils';
 
 import { FilterList } from './FilterList';
@@ -27,7 +27,7 @@ const OPERATORS = Object.values(operatorSelectableValues);
 
 interface Props {
   name: string;
-  rows: TableRow[];
+  indices: number[];
   filterValue?: Array<SelectableValue<unknown>>;
   setFilter: React.Dispatch<React.SetStateAction<FilterType>>;
   onClose: () => void;
@@ -40,7 +40,7 @@ interface Props {
 
 export const FilterPopup = ({
   name,
-  rows,
+  indices,
   filterValue,
   setFilter,
   onClose,
@@ -51,7 +51,7 @@ export const FilterPopup = ({
   setOperator,
 }: Props) => {
   const theme = useTheme2();
-  const uniqueValues = useMemo(() => calculateUniqueFieldValues(rows, field), [rows, field]);
+  const uniqueValues = useMemo(() => calculateUniqueFieldValues(indices, field), [indices, field]);
   const options = useMemo(() => valuesToOptions(uniqueValues), [uniqueValues]);
   const filteredOptions = useMemo(() => getFilteredOptions(options, filterValue), [options, filterValue]);
   const [values, setValues] = useState<SelectableValue[]>(filteredOptions);

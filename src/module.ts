@@ -197,6 +197,18 @@ export const plugin = new PanelPlugin<ExtendedOptions, FieldConfig>(TablePanel)
         editor: PaginationEditor,
         defaultValue: defaultOptions?.enablePagination,
       })
+      .addNumberInput({
+        path: 'paginationPageSize',
+        name: 'Rows per page',
+        category,
+        description: 'How many rows to show on one page when pagination is enabled',
+        settings: {
+          placeholder: '100',
+          min: 1,
+        },
+        defaultValue: 100,
+        showIf: (cfg) => Boolean(cfg.enablePagination),
+      })
       .addCustomEditor({
         id: 'columnGrouping',
         path: 'columnGrouping',

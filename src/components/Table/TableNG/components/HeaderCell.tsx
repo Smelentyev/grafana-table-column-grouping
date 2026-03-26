@@ -2,10 +2,10 @@ import { css, cx } from '@emotion/css';
 import React, { useEffect } from 'react';
 import { Column, SortDirection } from 'react-data-grid';
 
-import { Field, GrafanaTheme2, FieldType } from '@grafana/data';
+import { DataFrame, Field, GrafanaTheme2, FieldType } from '@grafana/data';
 import { useStyles2, Icon } from '@grafana/ui';
 import { Filter } from '../Filter/Filter';
-import { FilterType, TableRow, TableSummaryRow } from '../types';
+import { FilterType, TableSummaryRow, TableRow } from '../types';
 import { getDisplayName } from '../utils';
 
 // Local implementation of field type icon mapping
@@ -28,19 +28,19 @@ function getFieldTypeIcon(field: Field): string {
 
 interface HeaderCellProps {
   column: Column<TableRow, TableSummaryRow>;
-  rows: TableRow[];
+  data: DataFrame;
   field: Field;
   direction?: SortDirection;
   filter: FilterType;
   setFilter: React.Dispatch<React.SetStateAction<FilterType>>;
   crossFilterOrder: string[];
-  crossFilterRows: { [key: string]: TableRow[] };
+  crossFilterRows: { [key: string]: number[] };
   showTypeIcons?: boolean;
 }
 
 const HeaderCell: React.FC<HeaderCellProps> = ({
   column,
-  rows,
+  data,
   field,
   direction,
   filter,
@@ -83,7 +83,7 @@ const HeaderCell: React.FC<HeaderCellProps> = ({
       {filterable && (
         <Filter
           name={column.key}
-          rows={rows}
+          data={data}
           filter={filter}
           setFilter={setFilter}
           field={field}

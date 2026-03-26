@@ -108,6 +108,7 @@ export function TableNG(props: TableNGProps) {
     disableKeyboardEvents,
     disableSanitizeHtml,
     enablePagination = false,
+    paginationPageSize,
     enableSharedCrosshair = false,
     enableVirtualization,
     frozenColumns = 0,
@@ -245,6 +246,7 @@ export function TableNG(props: TableNGProps) {
     smallPagination,
   } = usePaginatedRows(sortedRows, {
     enabled: enablePagination,
+    pageSize: paginationPageSize,
     width: availableWidth,
     height,
     footerHeight,
@@ -686,7 +688,7 @@ export function TableNG(props: TableNGProps) {
           renderHeaderCell: ({ column, sortDirection }) => (
             <HeaderCell
               column={column}
-              rows={rows}
+              data={data}
               field={field}
               filter={filter}
               setFilter={setFilter}
