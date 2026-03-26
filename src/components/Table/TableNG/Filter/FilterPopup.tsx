@@ -7,7 +7,7 @@ import { FilterType } from '../types';
 import { getDisplayName } from '../utils';
 
 import { FilterList } from './FilterList';
-import { calculateUniqueFieldValues, getFilteredOptions, valuesToOptions } from './utils';
+import { calculateUniqueFieldValuesCached, getFilteredOptions, valuesToOptions } from './utils';
 
 export const operatorSelectableValues: { [key: string]: SelectableValue<string> } = {
   Contains: { label: 'Contains', value: 'Contains', description: 'Contains' },
@@ -51,7 +51,7 @@ export const FilterPopup = ({
   setOperator,
 }: Props) => {
   const theme = useTheme2();
-  const uniqueValues = useMemo(() => calculateUniqueFieldValues(indices, field), [indices, field]);
+  const uniqueValues = useMemo(() => calculateUniqueFieldValuesCached(indices, field), [indices, field]);
   const options = useMemo(() => valuesToOptions(uniqueValues), [uniqueValues]);
   const filteredOptions = useMemo(() => getFilteredOptions(options, filterValue), [options, filterValue]);
   const [values, setValues] = useState<SelectableValue[]>(filteredOptions);
