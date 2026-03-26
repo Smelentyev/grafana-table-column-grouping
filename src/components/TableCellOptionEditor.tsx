@@ -3,7 +3,6 @@ import { css } from '@emotion/css';
 import { merge } from 'lodash';
 
 import { GrafanaTheme2 } from '@grafana/data';
-import { t } from '@grafana/i18n';
 import { TableCellOptions } from '@grafana/schema';
 import { Combobox, ComboboxOption, Field, TableCellDisplayMode, useStyles2 } from '@grafana/ui';
 
@@ -31,20 +30,20 @@ export const TableCellOptionEditor = ({ value, onChange, id }: Props) => {
   const cellType = value.type;
   const styles = useStyles2(getStyles);
   const cellDisplayModeOptions: Array<ComboboxOption<TableCellOptions['type']>> = [
-    { value: TableCellDisplayMode.Auto, label: t('table.cell-types.auto', 'Auto') },
-    { value: TableCellDisplayMode.ColorText, label: t('table.cell-types.color-text', 'Colored text') },
+    { value: TableCellDisplayMode.Auto, label: 'Auto' },
+    { value: TableCellDisplayMode.ColorText, label: 'Colored text' },
     {
       value: TableCellDisplayMode.ColorBackground,
-      label: t('table.cell-types.color-background', 'Colored background'),
+      label: 'Colored background',
     },
-    { value: TableCellDisplayMode.DataLinks, label: t('table.cell-types.data-links', 'Data links') },
-    { value: TableCellDisplayMode.Gauge, label: t('table.cell-types.gauge', 'Gauge') },
-    { value: TableCellDisplayMode.Sparkline, label: t('table.cell-types.sparkline', 'Sparkline') },
-    { value: TableCellDisplayMode.JSONView, label: t('table.cell-types.json', 'JSON View') },
-    { value: TableCellDisplayMode.Pill, label: t('table.cell-types.pill', 'Pill') },
-    { value: TableCellDisplayMode.Markdown, label: t('table.cell-types.markdown', 'Markdown + HTML') },
-    { value: TableCellDisplayMode.Image, label: t('table.cell-types.image', 'Image') },
-    { value: TableCellDisplayMode.Actions, label: t('table.cell-types.actions', 'Actions') },
+    { value: TableCellDisplayMode.DataLinks, label: 'Data links' },
+    { value: TableCellDisplayMode.Gauge, label: 'Gauge' },
+    { value: TableCellDisplayMode.Sparkline, label: 'Sparkline' },
+    { value: TableCellDisplayMode.JSONView, label: 'JSON View' },
+    { value: TableCellDisplayMode.Pill, label: 'Pill' },
+    { value: TableCellDisplayMode.Markdown, label: 'Markdown + HTML' },
+    { value: TableCellDisplayMode.Image, label: 'Image' },
+    { value: TableCellDisplayMode.Actions, label: 'Actions' },
   ];
   const currentMode = cellDisplayModeOptions.find((o) => o.value === cellType)!;
 
