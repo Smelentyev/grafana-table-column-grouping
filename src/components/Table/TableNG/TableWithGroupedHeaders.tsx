@@ -270,7 +270,6 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
   /** Direct refs to <col> elements; written during drag to avoid React re-renders. */
   const colElemsRef = React.useRef<(HTMLTableColElement | null)[]>([]);
   const theadRef = React.useRef<HTMLTableSectionElement | null>(null);
-  const tbodyRef = React.useRef<HTMLTableSectionElement | null>(null);
   const [headerHeightPx, setHeaderHeightPx] = useState(0);
 
   // ── Cross-filter index chains ─────────────────────────────────────────────────
@@ -466,19 +465,12 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
 
   // ── Virtual scroll ───────────────────────────────────────────────────────────
   /** Estimated height per logical record (one record = maxFieldDepth visual rows). */
-  const [estimatedRecordHeightPx, setEstimatedRecordHeightPx] = useState(
-    maxFieldDepth * DEFAULT_ROW_HEIGHT_PX
-  );
-  const recordHeightPx = estimatedRecordHeightPx;
+  const recordHeightPx = maxFieldDepth * DEFAULT_ROW_HEIGHT_PX;
   const { scrollContainerRef, virtualWindow } = useVirtualScroll({
     totalRecords: pageRowIndices.length,
     recordHeightPx,
     leadingOffsetPx: hasHeader ? headerHeightPx : 0,
   });
-
-  React.useEffect(() => {
-    setEstimatedRecordHeightPx(maxFieldDepth * DEFAULT_ROW_HEIGHT_PX);
-  }, [maxFieldDepth, page, numRows]);
 
   React.useEffect(() => {
     const theadEl = theadRef.current;
@@ -512,39 +504,6 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
 
-  React.useLayoutEffect(() => {
-    const tbodyEl = tbodyRef.current;
-    if (!tbodyEl) {
-      return;
-    }
-
-    const rows = Array.from(tbodyEl.querySelectorAll<HTMLTableRowElement>('tr[data-record-pos]'));
-    if (rows.length === 0) {
-      return;
-    }
-
-    const recordHeights = new Map<number, number>();
-    for (const row of rows) {
-      const pos = Number(row.dataset.recordPos);
-      if (Number.isNaN(pos)) {
-        continue;
-      }
-      recordHeights.set(pos, (recordHeights.get(pos) ?? 0) + row.getBoundingClientRect().height);
-    }
-
-    if (recordHeights.size === 0) {
-      return;
-    }
-
-    const averageHeight =
-      Array.from(recordHeights.values()).reduce((sum, height) => sum + height, 0) /
-      recordHeights.size;
-
-    if (Number.isFinite(averageHeight) && Math.abs(averageHeight - estimatedRecordHeightPx) >= 2) {
-      setEstimatedRecordHeightPx(Math.max(DEFAULT_ROW_HEIGHT_PX, averageHeight));
-    }
-  }, [estimatedRecordHeightPx, pageRowIndices, virtualWindow.startIndex, virtualWindow.endIndex, maxFieldDepth]);
-
   // ── Display value cache ──────────────────────────────────────────────────────
   /** Cleared whenever `data` changes; filled lazily during body render. */
   const displayValueCache = useMemo(() => new Map<string, string>(), [data]);
@@ -569,7 +528,6 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
     return Array.from({ length: maxFieldDepth }, (_, fieldDepth) => (
       <tr
         key={`${pos}-${fieldDepth}`}
-        data-record-pos={pos}
         className={cx(styles.dataRow, recordIndexInPage % 2 === 0 && styles.dataRowEven)}
       >
         {cellPlanByDepth[fieldDepth].map(
@@ -756,7 +714,7 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
             </thead>
           )}
 
-          <tbody ref={tbodyRef}>
+          <tbody>
             {/* Top spacer — compensates for records rendered above the virtual window */}
             {virtualWindow.topSpacerPx > 0 && (
               <tr style={{ height: virtualWindow.topSpacerPx }}>
