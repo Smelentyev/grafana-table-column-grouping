@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.7 (2026-03-26)
+
+### Changed
+- Simplified the GitHub release workflow to publish unsigned ZIP and SHA1 artifacts while Grafana review and signing issues are unresolved
+
+### Notes
+- Public plugin signing currently fails with `409 InvalidArgument` for this plugin while it remains in `Waiting For Review`
+
 ## 1.0.6 (2026-03-26)
 
 ### Fixed
