@@ -268,7 +268,7 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
   const resizingHeaderRef = React.useRef<HTMLElement | null>(null);
   const pendingWidthRef = React.useRef<number | null>(null);
   /** Direct refs to <col> elements; written during drag to avoid React re-renders. */
-  const colElemsRef = React.useRef<(HTMLTableColElement | null)[]>([]);
+  const colElemsRef = React.useRef<Array<HTMLTableColElement | null>>([]);
   const theadRef = React.useRef<HTMLTableSectionElement | null>(null);
   const [headerHeightPx, setHeaderHeightPx] = useState(0);
 
@@ -506,7 +506,7 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
 
   // ── Display value cache ──────────────────────────────────────────────────────
   /** Cleared whenever `data` changes; filled lazily during body render. */
-  const displayValueCache = useMemo(() => new Map<string, string>(), [data]);
+  const displayValueCache = useMemo(() => new Map<string, string>(), []);
 
   // ── Cell plan ────────────────────────────────────────────────────────────────
   const cellPlanByDepth = useMemo<CellPlan[][]>(

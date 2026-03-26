@@ -730,7 +730,6 @@ export function TableNG(props: TableNGProps) {
       maxRowHeight,
       numFrozenColsFullyInView,
       onCellFilterAdded,
-      rows,
       rowHeight,
       rowHeightFn,
       setFilter,

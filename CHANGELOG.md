@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.4 (2026-03-26)
+
+### Fixed
+- Fixed CI lint failures caused by hook dependency and array type style violations
+- Updated the GitHub release workflow to use the current Grafana build action and required permissions
+
 ## 1.0.3 (2026-03-26)
 
 ### Changed

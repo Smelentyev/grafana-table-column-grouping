@@ -15,7 +15,7 @@ function makeField(name: string, values: unknown[], displayName?: string) {
   } as any;
 }
 
-function makeFrame(...fields: ReturnType<typeof makeField>[]) {
+function makeFrame(...fields: Array<ReturnType<typeof makeField>>) {
   return { fields, length: fields[0]?.values.length ?? 0 } as any;
 }
 
