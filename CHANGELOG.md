@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.3 (2026-03-26)
+
+### Changed
+- Simplified grouped table virtual row height calculation to remove DOM measurement from the table body
+- Reduced virtualized table rendering complexity by using a deterministic record height
+- Removed unused table body refs and row position markers from grouped header rendering
+
 ## 1.0.1 (2026-02-20)
 
 Initial public release with the following features:
