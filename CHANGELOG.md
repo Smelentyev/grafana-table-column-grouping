@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.6 (2026-03-26)
+
+### Fixed
+- Restored the previously working Grafana release workflow based on `grafana/plugin-actions/build-plugin@build-plugin/v1.0.2`
+- Reverted the custom release pipeline after repeated signing failures in tag-based release runs
+
 ## 1.0.5 (2026-03-26)
 
 ### Fixed
