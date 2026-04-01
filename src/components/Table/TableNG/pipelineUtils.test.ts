@@ -322,6 +322,19 @@ describe('buildGroupedHeaderStructure', () => {
     expect(columns[0].fields.map((f) => f.name)).toEqual(['root', 'c1', 'c2']);
   });
 
+  test('root group header cells are sortable by their own field', () => {
+    const frame = makeFrame(makeField('root', []), makeField('c1', []), makeField('c2', []));
+    const config = [rootGroup('root', [leafColumn('c1'), leafColumn('c2')])];
+    const { headerRows } = buildGroupedHeaderStructure(frame, config);
+
+    expect(headerRows[0][0]).toEqual(
+      expect.objectContaining({
+        name: 'root',
+        isSortable: true,
+      })
+    );
+  });
+
   test('uneven root groups: maxDepth equals deeper group depth', () => {
     // Group A: root → [c1] → depth 2
     // Group B: root → [c2, c3] → depth 3

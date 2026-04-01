@@ -38,6 +38,8 @@ export interface UseVirtualScrollResult {
   scrollContainerRef: RefObject<HTMLDivElement>;
   /** Current virtual window — drives which records are rendered. */
   virtualWindow: VirtualWindow;
+  /** Imperatively recompute the virtual window (e.g. after a page change). */
+  recomputeWindow: () => void;
 }
 
 export function useVirtualScroll({
@@ -91,5 +93,5 @@ export function useVirtualScroll({
     };
   }, [updateWindow]);
 
-  return { scrollContainerRef, virtualWindow };
+  return { scrollContainerRef, virtualWindow, recomputeWindow: updateWindow };
 }

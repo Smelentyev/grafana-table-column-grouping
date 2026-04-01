@@ -11,6 +11,8 @@ import {
   FilterType,
   TableRow,
   TableSortByFieldState,
+  FILTER_FOR_OPERATOR,
+  FILTER_OUT_OPERATOR,
 } from './types';
 import { TableCellInspector } from '../TableCellInspector';
 import { TableCellActions } from './components/TableCellActions';
@@ -32,6 +34,7 @@ import {
   getVisibleFields,
   parseStyleJson,
   predicateByName,
+  buildInspectValue,
 } from './utils';
 import { filterIndices, buildCellPlanByDepth, CellPlan } from './pipelineUtils';
 import {
@@ -39,7 +42,16 @@ import {
   buildSimpleHeaderStructure,
   normalizeRootGroups,
 } from './groupedTable/groupHeaderPipeline';
+import {
+  ActiveGroupedCell,
+  buildOwnershipMatrix,
+  clampActiveCell,
+  getCellId,
+  moveActiveCell,
+  moveActiveCellByRecord,
+} from './groupedTable/keyboardNavigation';
 import { HeaderCell } from './groupedTable/groupTypes';
+import { usePaginatedRows } from './hooks';
 import { useVirtualScroll } from './groupedTable/useVirtualScroll';
 import { DEFAULT_ROW_HEIGHT_PX } from './groupedTable/virtualWindow';
 
@@ -104,6 +116,9 @@ const getStyles = (theme: GrafanaTheme2) => ({
     overflow: auto;
     flex: 1 1 auto;
     min-height: 0;
+    outline: none;
+    position: relative;
+    z-index: 0;
   `,
   table: css`
     width: 100%;
@@ -236,6 +251,11 @@ const getStyles = (theme: GrafanaTheme2) => ({
       border-left: 1px solid ${theme.colors.border.weak};
     }
   `,
+  activeCell: css`
+    outline: 2px solid ${theme.colors.primary.main};
+    outline-offset: -2px;
+    z-index: 1;
+  `,
   footerRow: css`
     background-color: ${theme.colors.background.secondary};
   `,
@@ -326,8 +346,13 @@ const getStyles = (theme: GrafanaTheme2) => ({
     align-items: center;
     display: flex;
     justify-content: center;
-    padding: ${theme.spacing(1)} ${theme.spacing(1)} 0 ${theme.spacing(1)};
+    margin-top: ${theme.spacing(1)};
+    padding: ${theme.spacing(0, 1, 0.5, 1)};
     flex: 0 0 auto;
+    position: relative;
+    z-index: 4;
+    pointer-events: auto;
+    width: 100%;
   `,
   paginationSummary: css`
     color: ${theme.colors.text.secondary};
@@ -349,6 +374,7 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
     onColumnResize,
     onSortByChange,
     showTypeIcons,
+    disableKeyboardEvents,
     enablePagination,
     paginationPageSize,
     cellHeight,
@@ -361,6 +387,8 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
   const styles = useStyles2(getStyles);
   const theme = useTheme2();
   const [inspectCell, setInspectCell] = useState<InspectCellProps | null>(null);
+  const [activeCell, setActiveCell] = useState<ActiveGroupedCell | null>(null);
+  const [hasKeyboardFocus, setHasKeyboardFocus] = useState(false);
 
   const hasHeader = !noHeader;
   const visibleFields = useMemo(() => getVisibleFields(data.fields), [data.fields]);
@@ -443,15 +471,6 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
     return result;
   }, [visibleData, filter, crossFilterOrder]);
 
-  React.useEffect(() => {
-    onSortByChange?.(
-      sortColumns.map((col) => ({
-        displayName: String(col.columnKey),
-        desc: col.direction === 'DESC',
-      }))
-    );
-  }, [sortColumns, onSortByChange]);
-
   // ── Sort handler ─────────────────────────────────────────────────────────────
   const handleHeaderClick = useCallback((cell: HeaderCell) => {
     if (!cell.field || !cell.isSortable) {
@@ -459,16 +478,26 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
     }
     const fieldName = getDisplayName(cell.field);
     setSortColumns((prev) => {
+      let nextSortColumns: SortColumn[];
       const existing = prev.find((sc) => sc.columnKey === fieldName);
       if (!existing) {
-        return [{ columnKey: fieldName, direction: 'ASC' }];
+        nextSortColumns = [{ columnKey: fieldName, direction: 'ASC' }];
+      } else if (existing.direction === 'ASC') {
+        nextSortColumns = [{ columnKey: fieldName, direction: 'DESC' }];
+      } else {
+        nextSortColumns = [];
       }
-      if (existing.direction === 'ASC') {
-        return [{ columnKey: fieldName, direction: 'DESC' }];
-      }
-      return [];
+
+      onSortByChange?.(
+        nextSortColumns.map((col) => ({
+          displayName: String(col.columnKey),
+          desc: col.direction === 'DESC',
+        }))
+      );
+
+      return nextSortColumns;
     });
-  }, []);
+  }, [onSortByChange]);
 
   // ── Column resize handlers ───────────────────────────────────────────────────
   const handleResizeStart = (columnIndex: number, event: React.MouseEvent) => {
@@ -595,60 +624,55 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
 
   // ── Pagination ───────────────────────────────────────────────────────────────
   const numRows = filteredSortedIndices.length;
+  const estimatedHeaderHeightPx = hasHeader ? headerHeightPx || TABLE.HEADER_ROW_HEIGHT : 0;
+  const estimatedFooterHeightPx = hasFooter
+    ? typeof defaultRowHeight === 'number'
+      ? defaultRowHeight
+      : DEFAULT_ROW_HEIGHT_PX
+    : 0;
+  const averageRecordHeightPx = Math.max(
+    1,
+    measuredRecordHeightPx ??
+      (typeof defaultRowHeight === 'number' ? defaultRowHeight * maxDepth : DEFAULT_ROW_HEIGHT_PX * maxDepth)
+  );
 
-
-  const [page, setPage] = useState(0);
   const paginationEnabled = Boolean(enablePagination);
-  const rowsPerPage = useMemo(
-    () => (paginationPageSize && paginationPageSize > 0 ? paginationPageSize : 100),
-    [paginationPageSize]
-  );
-  const numPages = useMemo(
-    () => (paginationEnabled ? Math.ceil(numRows / rowsPerPage) : 1),
-    [numRows, rowsPerPage, paginationEnabled]
-  );
-  const pageRangeStart = useMemo(
-    () => (paginationEnabled ? page * rowsPerPage + 1 : 1),
-    [page, rowsPerPage, paginationEnabled]
-  );
-  const pageRangeEnd = useMemo(
-    () => (paginationEnabled ? Math.min(numRows, (page + 1) * rowsPerPage) : numRows),
-    [numRows, page, rowsPerPage, paginationEnabled]
-  );
-
-  // Guard against page overflow on filter/sort changes.
-  React.useEffect(() => {
-    if (!paginationEnabled && page !== 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setPage(0);
-      return;
-    }
-    if (page >= numPages && numPages > 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setPage(numPages - 1);
-    }
-  }, [page, numPages, paginationEnabled]);
+  const {
+    rows: paginatedRows,
+    page,
+    setPage,
+    numPages,
+    rowsPerPage,
+    pageRangeStart,
+    pageRangeEnd,
+    smallPagination,
+  } = usePaginatedRows(filteredSortedRows, {
+    enabled: paginationEnabled,
+    pageSize: paginationPageSize,
+    width,
+    height,
+    footerHeight: estimatedFooterHeightPx,
+    headerHeight: estimatedHeaderHeightPx,
+    rowHeight: averageRecordHeightPx,
+  });
 
   /**
-   * Positions (0-based) within filteredSortedIndices that belong to the current page.
-   * These are NOT raw data indices — use `filteredSortedIndices[pos]` to get the data index.
+   * Original row indices that belong to the current page.
    */
   const pageRowIndices = useMemo(() => {
     if (numRows === 0) {
       return [];
     }
     if (!paginationEnabled) {
-      return Array.from({ length: numRows }, (_, i) => i);
+      return filteredSortedRows.map((row) => row.__index);
     }
-    const start = page * rowsPerPage;
-    const end = Math.min(numRows, start + rowsPerPage);
-    return Array.from({ length: end - start }, (_, i) => start + i);
-  }, [numRows, page, rowsPerPage, paginationEnabled]);
+    return paginatedRows.map((row) => row.__index);
+  }, [filteredSortedRows, numRows, paginatedRows, paginationEnabled]);
 
   // ── Virtual scroll ───────────────────────────────────────────────────────────
   /** Estimated height per logical record (one record = maxDepth visual rows). */
   const recordHeightPx = measuredRecordHeightPx ?? maxDepth * DEFAULT_ROW_HEIGHT_PX;
-  const { scrollContainerRef, virtualWindow } = useVirtualScroll({
+  const { scrollContainerRef, virtualWindow, recomputeWindow } = useVirtualScroll({
     totalRecords: pageRowIndices.length,
     recordHeightPx,
     leadingOffsetPx: hasHeader ? headerHeightPx : 0,
@@ -704,11 +728,14 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
     };
   }, [pageRowIndices, virtualWindow.startIndex, virtualWindow.endIndex, maxDepth, columns.length]);
 
-  // Reset scroll position when the page changes so new page always starts at top.
+  // Reset scroll position when the page changes so new page always starts at top,
+  // then explicitly recompute the virtual window (setting scrollTop=0 on an element
+  // already at 0 does not fire a scroll event, so the window must be updated manually).
   React.useEffect(() => {
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = 0;
     }
+    recomputeWindow();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
 
@@ -721,6 +748,209 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
     () => buildCellPlanByDepth(columns, maxDepth),
     [columns, maxDepth]
   );
+  const gridDimensions = useMemo(
+    () => ({
+      columnCount: columns.length,
+      maxDepth,
+      recordCount: pageRowIndices.length,
+    }),
+    [columns.length, maxDepth, pageRowIndices.length]
+  );
+  const ownershipMatrix = useMemo(
+    () => buildOwnershipMatrix(cellPlanByDepth, gridDimensions),
+    [cellPlanByDepth, gridDimensions]
+  );
+
+  React.useEffect(() => {
+    setActiveCell((prev) => clampActiveCell(prev, gridDimensions));
+  }, [gridDimensions]);
+
+  const focusTable = useCallback(() => {
+    scrollContainerRef.current?.focus();
+  }, [scrollContainerRef]);
+
+  const openInspectorForCell = useCallback(
+    (cell: ActiveGroupedCell) => {
+      const originalRowIndex = pageRowIndices[cell.recordIndex];
+      const plan = cellPlanByDepth[cell.fieldDepth]?.find((item) => item.colIndex === cell.colIndex);
+      const field = plan?.field;
+      if (field == null || originalRowIndex == null) {
+        return;
+      }
+
+      const value = field.values[originalRowIndex];
+      const [inspectValue, mode] = buildInspectValue(value, field);
+      setInspectCell({ value: inspectValue, mode });
+    },
+    [cellPlanByDepth, pageRowIndices]
+  );
+
+  const applyFilterForCell = useCallback(
+    (cell: ActiveGroupedCell, operator: typeof FILTER_FOR_OPERATOR | typeof FILTER_OUT_OPERATOR) => {
+      if (!onCellFilterAdded) {
+        return;
+      }
+
+      const originalRowIndex = pageRowIndices[cell.recordIndex];
+      const plan = cellPlanByDepth[cell.fieldDepth]?.find((item) => item.colIndex === cell.colIndex);
+      const field = plan?.field;
+      if (!field || originalRowIndex == null) {
+        return;
+      }
+
+      onCellFilterAdded({
+        key: field.name,
+        operator,
+        value: String(field.values[originalRowIndex] ?? ''),
+      });
+    },
+    [cellPlanByDepth, onCellFilterAdded, pageRowIndices]
+  );
+
+  const goToPage = useCallback(
+    (nextPage: number) => {
+      if (!paginationEnabled || numPages <= 0) {
+        return;
+      }
+
+      const safePage = Math.max(0, Math.min(numPages - 1, nextPage));
+      if (safePage === page) {
+        return;
+      }
+
+      const nextRecordIndex = activeCell ? Math.min(activeCell.recordIndex, Math.max(rowsPerPage - 1, 0)) : 0;
+      const nextFieldDepth = activeCell?.fieldDepth ?? 0;
+      const nextColIndex = activeCell?.colIndex ?? 0;
+      setPage(safePage);
+      setActiveCell({
+        recordIndex: nextRecordIndex,
+        fieldDepth: nextFieldDepth,
+        colIndex: nextColIndex,
+      });
+    },
+    [activeCell, numPages, page, paginationEnabled, rowsPerPage]
+  );
+
+  React.useEffect(() => {
+    if (!activeCell) {
+      return;
+    }
+
+    const container = scrollContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const approxSubRowHeight = Math.max(1, recordHeightPx / Math.max(1, maxDepth));
+    const cellTop = activeCell.recordIndex * recordHeightPx + activeCell.fieldDepth * approxSubRowHeight;
+    const cellBottom = cellTop + approxSubRowHeight;
+    const viewportTop = container.scrollTop;
+    const viewportBottom = viewportTop + container.clientHeight;
+
+    if (cellTop < viewportTop) {
+      container.scrollTop = Math.max(0, cellTop);
+    } else if (cellBottom > viewportBottom) {
+      container.scrollTop = Math.max(0, cellBottom - container.clientHeight);
+    }
+
+    const target = container.querySelector<HTMLElement>(`[data-active-cell-id="${getCellId(activeCell)}"]`);
+    target?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [activeCell, maxDepth, recordHeightPx, scrollContainerRef, page]);
+
+  const handleTableKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      const target = event.target as HTMLElement | null;
+      const isFilterHotkey = event.code === 'KeyF';
+      if (
+        !target ||
+        target.closest('input, textarea, select, button, [contenteditable="true"], [role="dialog"], [role="listbox"]')
+      ) {
+        return;
+      }
+
+      if (event.ctrlKey && !event.shiftKey && (event.key === 'ArrowRight' || event.key === 'ArrowLeft')) {
+        event.preventDefault();
+        goToPage(page + (event.key === 'ArrowRight' ? 1 : -1));
+        return;
+      }
+
+      if (!activeCell) {
+        const nextCell = clampActiveCell(null, gridDimensions);
+        if (!nextCell) {
+          return;
+        }
+
+        if (event.key.startsWith('Arrow') || event.key === 'Home' || event.key === 'End') {
+          event.preventDefault();
+          setActiveCell(nextCell);
+          return;
+        }
+
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          setActiveCell(nextCell);
+          openInspectorForCell(nextCell);
+          return;
+        }
+
+        if (isFilterHotkey) {
+          event.preventDefault();
+          setActiveCell(nextCell);
+          applyFilterForCell(nextCell, event.shiftKey ? FILTER_OUT_OPERATOR : FILTER_FOR_OPERATOR);
+        }
+        return;
+      }
+
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        setActiveCell(
+          event.shiftKey
+            ? moveActiveCellByRecord(activeCell, 'up', ownershipMatrix, gridDimensions)
+            : moveActiveCell(activeCell, 'up', ownershipMatrix, gridDimensions)
+        );
+        return;
+      }
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        setActiveCell(
+          event.shiftKey
+            ? moveActiveCellByRecord(activeCell, 'down', ownershipMatrix, gridDimensions)
+            : moveActiveCell(activeCell, 'down', ownershipMatrix, gridDimensions)
+        );
+        return;
+      }
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        setActiveCell(moveActiveCell(activeCell, 'left', ownershipMatrix, gridDimensions));
+        return;
+      }
+      if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        setActiveCell(moveActiveCell(activeCell, 'right', ownershipMatrix, gridDimensions));
+        return;
+      }
+      if (event.key === 'Home') {
+        event.preventDefault();
+        setActiveCell(moveActiveCell(activeCell, 'home', ownershipMatrix, gridDimensions));
+        return;
+      }
+      if (event.key === 'End') {
+        event.preventDefault();
+        setActiveCell(moveActiveCell(activeCell, 'end', ownershipMatrix, gridDimensions));
+        return;
+      }
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        openInspectorForCell(activeCell);
+        return;
+      }
+      if (isFilterHotkey) {
+        event.preventDefault();
+        applyFilterForCell(activeCell, event.shiftKey ? FILTER_OUT_OPERATOR : FILTER_FOR_OPERATOR);
+      }
+    },
+    [activeCell, applyFilterForCell, goToPage, gridDimensions, openInspectorForCell, ownershipMatrix, page]
+  );
 
   // ── Guard: grouping must be enabled ─────────────────────────────────────────
   if (!columnGrouping.enabled) {
@@ -732,12 +962,10 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
   /** Renders a single logical record wrapped in its own <tbody>.
    *  Grouping sub-rows under one <tbody> lets CSS `tbody:hover > tr` highlight
    *  the full logical record without triggering leave/enter flicker between sub-rows. */
-  const renderRecord = (pos: number, recordIndexInPage: number, isFirstVisible: boolean) => {
-    // `pos` is a position in filteredSortedIndices; `recordIndexInPage` drives alternation.
-    const originalRowIndex = filteredSortedIndices[pos];
+  const renderRecord = (originalRowIndex: number, recordIndexInPage: number, isFirstVisible: boolean) => {
     return (
       <tbody
-        key={pos}
+        key={`${recordIndexInPage}-${originalRowIndex}`}
         ref={(node) => {
           if (isFirstVisible) {
             firstVisibleRecordRef.current = node;
@@ -881,7 +1109,27 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
             return (
               <td
                 key={`${fieldDepth}-${colIndex}`}
-                className={styles.dataCell}
+                className={cx(
+                  styles.dataCell,
+                  hasKeyboardFocus &&
+                    activeCell?.recordIndex === recordIndexInPage &&
+                    activeCell?.fieldDepth === fieldDepth &&
+                    activeCell?.colIndex === colIndex &&
+                    styles.activeCell
+                )}
+                data-active-cell-id={getCellId({
+                  recordIndex: recordIndexInPage,
+                  fieldDepth,
+                  colIndex,
+                })}
+                onClick={() => {
+                  setActiveCell({
+                    recordIndex: recordIndexInPage,
+                    fieldDepth,
+                    colIndex,
+                  });
+                  focusTable();
+                }}
                 onMouseEnter={(e) => {
                   const actions = e.currentTarget.querySelector<HTMLElement>('[data-role="cell-actions"]');
                   if (actions) {
@@ -920,7 +1168,22 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
 
   return (
     <div className={styles.container} style={{ height }}>
-      <div className={styles.tableScroll} ref={scrollContainerRef}>
+      <div
+        className={styles.tableScroll}
+        ref={scrollContainerRef}
+        tabIndex={disableKeyboardEvents ? -1 : 0}
+        role="grid"
+        aria-label="Grouped table"
+        onFocus={() => {
+          setHasKeyboardFocus(true);
+        }}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            setHasKeyboardFocus(false);
+          }
+        }}
+        onKeyDown={disableKeyboardEvents ? undefined : handleTableKeyDown}
+      >
         <table className={styles.table}>
           {/*
            * <colgroup> is the single source of truth for column widths with
@@ -1031,8 +1294,8 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
           {/* Visible records — each logical record in its own <tbody> for hover correctness */}
           {pageRowIndices
             .slice(virtualWindow.startIndex, virtualWindow.endIndex)
-            .map((pos, visibleIdx) =>
-              renderRecord(pos, virtualWindow.startIndex + visibleIdx, visibleIdx === 0)
+            .map((originalRowIndex, visibleIdx) =>
+              renderRecord(originalRowIndex, virtualWindow.startIndex + visibleIdx, visibleIdx === 0)
             )}
 
           {/* Bottom spacer — compensates for records rendered below the virtual window */}
@@ -1088,7 +1351,7 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
             className="table-ng-pagination"
             currentPage={page + 1}
             numberOfPages={numPages}
-            showSmallVersion={false}
+            showSmallVersion={smallPagination}
             onNavigate={(toPage) => setPage(toPage - 1)}
           />
           <div className={styles.paginationSummary}>

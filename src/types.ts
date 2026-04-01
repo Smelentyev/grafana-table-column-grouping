@@ -15,5 +15,6 @@ export const defaultColumnGroupingSettings: ColumnGroupingSettings = {
  */
 export interface ExtendedOptions extends GeneratedOptions {
   columnGrouping?: ColumnGroupingSettings;
+  paginationEnabled?: boolean;
   paginationPageSize?: number;
 }

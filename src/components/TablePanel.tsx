@@ -63,6 +63,7 @@ export function TablePanel(props: Props) {
   const disableSanitizeHtml = config.disableSanitizeHtml;
 
   const columnGrouping: ColumnGroupingSettings = options.columnGrouping ?? defaultColumnGroupingSettings;
+  const paginationEnabled = options.paginationEnabled ?? options.enablePagination;
 
   const tableElement = (
     <TableNG
@@ -77,7 +78,7 @@ export function TablePanel(props: Props) {
       onColumnResize={(displayName, resizedWidth) => onColumnResize(displayName, resizedWidth, props)}
       onCellFilterAdded={panelContext.onAddAdHocFilter}
       frozenColumns={options.frozenColumns?.left}
-      enablePagination={options.enablePagination}
+      enablePagination={paginationEnabled}
       paginationPageSize={options.paginationPageSize}
       cellHeight={options.cellHeight}
       maxRowHeight={options.maxRowHeight}

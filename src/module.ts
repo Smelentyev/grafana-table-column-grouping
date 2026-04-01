@@ -6,7 +6,6 @@ import {
   TableCellTooltipPlacement,
 } from '@grafana/schema';
 
-import { PaginationEditor } from './components/PaginationEditor';
 import { TableCellOptionEditor } from './components/TableCellOptionEditor';
 import { TablePanel } from './components/TablePanel';
 import { defaultOptions, FieldConfig } from './panelcfg.gen';
@@ -189,13 +188,11 @@ export const plugin = new PanelPlugin<ExtendedOptions, FieldConfig>(TablePanel)
           min: 0,
         },
       })
-      .addCustomEditor({
-        id: 'enablePagination',
-        path: 'enablePagination',
+      .addBooleanSwitch({
+        path: 'paginationEnabled',
         name: 'Enable pagination',
         category,
-        editor: PaginationEditor,
-        defaultValue: defaultOptions?.enablePagination,
+        defaultValue: false,
       })
       .addNumberInput({
         path: 'paginationPageSize',
@@ -207,7 +204,7 @@ export const plugin = new PanelPlugin<ExtendedOptions, FieldConfig>(TablePanel)
           min: 1,
         },
         defaultValue: 100,
-        showIf: (cfg) => Boolean(cfg.enablePagination),
+        showIf: (cfg) => Boolean(cfg.paginationEnabled ?? cfg.enablePagination),
       })
       .addCustomEditor({
         id: 'columnGrouping',

@@ -283,7 +283,7 @@ function addChildHeaders(
         level: startLevel,
         columnIndex,
         field,
-        isSortable: false,
+        isSortable: true,
         isFilterable: isColumnFilterEnabled(field),
       });
       if (item.orientation === 'vertical' && item.children.length > 0) {
@@ -371,7 +371,7 @@ function processGroupItem(
       level: startLevel,
       columnIndex: startColumnIndex,
       field,
-      isSortable: false,
+      isSortable: true,
       isFilterable: isColumnFilterEnabled(field),
     });
 
