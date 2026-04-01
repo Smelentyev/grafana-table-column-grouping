@@ -17,6 +17,7 @@ interface Props {
   crossFilterOrder: string[];
   crossFilterRows: { [key: string]: number[] };
   iconClassName?: string;
+  buttonClassName?: string;
 }
 
 export const Filter = ({
@@ -28,6 +29,7 @@ export const Filter = ({
   crossFilterOrder,
   crossFilterRows,
   iconClassName,
+  buttonClassName,
 }: Props) => {
   const filterValue = filter[name]?.filtered;
 
@@ -58,7 +60,7 @@ export const Filter = ({
 
   return (
     <button
-      className={styles.headerFilter}
+      className={cx(styles.headerFilter, buttonClassName)}
       ref={setButtonElement}
       type="button"
       data-testid="table-filter-header-button"
@@ -104,7 +106,15 @@ const getStyles = (theme: GrafanaTheme2) => ({
     border: 'none',
     label: 'headerFilter',
     padding: 0,
-    alignSelf: 'flex-end',
+    lineHeight: 0,
+    fontSize: 0,
+    width: theme.spacing(2.5),
+    height: theme.spacing(2.5),
+    minWidth: theme.spacing(2.5),
+    minHeight: theme.spacing(2.5),
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   }),
   filterIconEnabled: css({
     label: 'filterIconEnabled',

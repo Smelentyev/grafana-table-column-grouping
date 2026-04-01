@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import { GrafanaTheme2, Field, FieldType } from '@grafana/data';
-import { useStyles2, DataLinksContextMenu, Icon, Pagination } from '@grafana/ui';
+import { TableCellTooltipPlacement } from '@grafana/schema';
+import { useStyles2, useTheme2, DataLinksContextMenu, Icon, Pagination, Popover } from '@grafana/ui';
 import { css, cx } from '@emotion/css';
 import { SortColumn } from 'react-data-grid';
 import {
@@ -9,15 +10,34 @@ import {
   InspectCellProps,
   FilterType,
   TableRow,
+  TableSortByFieldState,
 } from './types';
 import { TableCellInspector } from '../TableCellInspector';
 import { TableCellActions } from './components/TableCellActions';
+import { SummaryCell } from './components/SummaryCell';
 import { Filter } from './Filter/Filter';
-import { applySort, getColumnTypes, getDisplayName } from './utils';
+import { getCellRenderer } from './Cells/renderers';
+import { COLUMN, TABLE } from './constants';
+import {
+  applySort,
+  computeColWidths,
+  getAlignment,
+  getCellColorInlineStylesFactory,
+  getCellOptions,
+  getColumnTypes,
+  getDefaultRowHeight,
+  getDisplayName,
+  getJustifyContent,
+  getTextColorForBackground,
+  getVisibleFields,
+  parseStyleJson,
+  predicateByName,
+} from './utils';
 import { filterIndices, buildCellPlanByDepth, CellPlan } from './pipelineUtils';
 import {
   buildGroupedHeaderStructure,
   buildSimpleHeaderStructure,
+  normalizeRootGroups,
 } from './groupedTable/groupHeaderPipeline';
 import { HeaderCell } from './groupedTable/groupTypes';
 import { useVirtualScroll } from './groupedTable/useVirtualScroll';
@@ -26,6 +46,33 @@ import { DEFAULT_ROW_HEIGHT_PX } from './groupedTable/virtualWindow';
 interface TableWithGroupedHeadersProps extends TableNGProps {
   columnGrouping: ColumnGroupingSettings;
 }
+
+const tooltipTriggerStyle = css`
+  width: 100%;
+  min-width: 0;
+`;
+
+const GroupedCellTooltip = ({
+  content,
+  placement,
+  children,
+}: {
+  content: React.ReactNode;
+  placement?: TableCellTooltipPlacement;
+  children: React.ReactNode;
+}) => {
+  const [open, setOpen] = useState(false);
+  const [referenceEl, setReferenceEl] = useState<HTMLDivElement | null>(null);
+
+  return (
+    <div ref={setReferenceEl} className={tooltipTriggerStyle} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      {referenceEl && content != null && (
+        <Popover content={<>{content}</>} show={open} placement={placement} referenceElement={referenceEl} />
+      )}
+      {children}
+    </div>
+  );
+};
 
 // Helper function to get field type icon
 function getFieldTypeIcon(field: Field): string {
@@ -92,6 +139,9 @@ const getStyles = (theme: GrafanaTheme2) => ({
       border-left: 1px solid ${theme.colors.border.medium};
     }
   `,
+  headerCellFilterable: css`
+    padding-right: ${theme.spacing(5)};
+  `,
   headerCellClickable: css`
     cursor: pointer;
     &:hover {
@@ -140,17 +190,40 @@ const getStyles = (theme: GrafanaTheme2) => ({
     align-items: center;
     justify-content: center;
     gap: ${theme.spacing(0.5)};
+    position: relative;
+    width: 100%;
+    min-width: 0;
+    padding-right: ${theme.spacing(3)};
   `,
-  dataRow: css`
-    &:hover {
+  headerCellLabel: css`
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: ${theme.spacing(0.5)};
+    min-width: 0;
+  `,
+  headerFilterButton: css`
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+  `,
+  dataRow: css``,
+  /** Applied to the per-record <tbody> wrapper; highlights the whole logical record on hover. */
+  recordGroup: css`
+    &:hover > tr {
       background-color: ${theme.colors.emphasize(theme.colors.background.canvas, 0.03)};
     }
   `,
-  dataRowEven: css`
+  recordGroupEven: css`
     background-color: ${theme.colors.background.canvas};
   `,
   dataCell: css`
-    padding: ${theme.spacing(0.5)} ${theme.spacing(1)};
+    padding: ${theme.spacing(0.25)} ${theme.spacing(1)};
     border-right: 1px solid ${theme.colors.border.weak};
     border-bottom: 1px solid ${theme.colors.border.weak};
     vertical-align: top;
@@ -163,13 +236,27 @@ const getStyles = (theme: GrafanaTheme2) => ({
       border-left: 1px solid ${theme.colors.border.weak};
     }
   `,
+  footerRow: css`
+    background-color: ${theme.colors.background.secondary};
+  `,
+  footerCell: css`
+    padding: ${theme.spacing(0.5)} ${theme.spacing(1)};
+    border-right: 1px solid ${theme.colors.border.weak};
+    border-bottom: 1px solid ${theme.colors.border.medium};
+    vertical-align: top;
+
+    &:first-child {
+      border-left: 1px solid ${theme.colors.border.weak};
+    }
+  `,
   cellLine: css`
-    padding: ${theme.spacing(0.25)} 0;
-    min-height: 20px;
+    padding: 0;
+    min-height: 16px;
     display: flex;
     align-items: center;
     gap: ${theme.spacing(0.5)};
     flex-wrap: wrap;
+    position: relative;
 
     &:not(:last-child) {
       border-bottom: 1px solid ${theme.colors.border.weak};
@@ -177,11 +264,12 @@ const getStyles = (theme: GrafanaTheme2) => ({
 
     &:hover > div:last-child {
       opacity: 1;
+      pointer-events: auto;
     }
   `,
   cellLineFilterable: css`
-    padding: ${theme.spacing(0.25)} 0;
-    min-height: 20px;
+    padding: 0;
+    min-height: 16px;
     cursor: pointer;
     transition: background-color 0.2s;
     display: flex;
@@ -211,13 +299,28 @@ const getStyles = (theme: GrafanaTheme2) => ({
     flex: 1 1 auto;
     min-width: 0;
   `,
+  cellRenderWrap: css`
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+  `,
+  clampWrap: css`
+    overflow: hidden;
+  `,
   cellActions: css`
     display: inline-flex;
     align-items: center;
     gap: ${theme.spacing(0.5)};
-    margin-left: auto;
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
     opacity: 0;
+    pointer-events: none;
     transition: opacity 0.15s ease-in-out;
+    background: ${theme.colors.background.canvas};
+    z-index: 2;
   `,
   paginationContainer: css`
     align-items: center;
@@ -240,21 +343,60 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
     data,
     columnGrouping,
     height,
+    width,
     noHeader,
     onCellFilterAdded,
     onColumnResize,
+    onSortByChange,
     showTypeIcons,
     enablePagination,
     paginationPageSize,
+    cellHeight,
+    maxRowHeight,
+    initialSortBy,
+    timeRange,
+    disableSanitizeHtml,
+    getActions = () => [],
   } = props;
   const styles = useStyles2(getStyles);
+  const theme = useTheme2();
   const [inspectCell, setInspectCell] = useState<InspectCellProps | null>(null);
 
   const hasHeader = !noHeader;
+  const visibleFields = useMemo(() => getVisibleFields(data.fields), [data.fields]);
+  const visibleData = useMemo(() => ({ ...data, fields: visibleFields }), [data, visibleFields]);
+  const normalizedRootGroups = useMemo(
+    () => normalizeRootGroups(columnGrouping.rootGroups ?? [], visibleFields),
+    [columnGrouping.rootGroups, visibleFields]
+  );
+  const groupedRows = useMemo<TableRow[]>(
+    () =>
+      Array.from({ length: visibleData.length }, (_, i) => {
+        const row: TableRow = { __depth: 0, __index: i };
+        for (const field of visibleData.fields) {
+          row[getDisplayName(field)] = field.values[i];
+        }
+        return row;
+      }),
+    [visibleData]
+  );
+  const defaultRowHeight = useMemo(() => getDefaultRowHeight(theme, visibleFields, cellHeight), [theme, visibleFields, cellHeight]);
+  const perLineMinHeight = useMemo(
+    () => (typeof defaultRowHeight === 'number' ? Math.max(16, defaultRowHeight - TABLE.CELL_PADDING) : DEFAULT_ROW_HEIGHT_PX),
+    [defaultRowHeight]
+  );
+  const getCellColorInlineStyles = useMemo(() => getCellColorInlineStylesFactory(theme), [theme]);
 
   // ── Sort state ───────────────────────────────────────────────────────────────
-  const [sortColumns, setSortColumns] = useState<SortColumn[]>([]);
-  const columnTypes = useMemo(() => getColumnTypes(data.fields), [data.fields]);
+  const [sortColumns, setSortColumns] = useState<SortColumn[]>(
+    () =>
+      initialSortBy?.flatMap(({ displayName, desc }: TableSortByFieldState) =>
+        visibleFields.some((f) => getDisplayName(f) === displayName)
+          ? [{ columnKey: displayName, direction: desc ? ('DESC' as const) : ('ASC' as const) }]
+          : []
+      ) ?? []
+  );
+  const columnTypes = useMemo(() => getColumnTypes(visibleData.fields), [visibleData.fields]);
 
   // ── Filter state ─────────────────────────────────────────────────────────────
   const [filter, setFilter] = useState<FilterType>({});
@@ -267,10 +409,15 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
   const resizeStartWidthRef = React.useRef<number>(0);
   const resizingHeaderRef = React.useRef<HTMLElement | null>(null);
   const pendingWidthRef = React.useRef<number | null>(null);
+  const columnMinWidthsRef = React.useRef<number[]>([]);
   /** Direct refs to <col> elements; written during drag to avoid React re-renders. */
   const colElemsRef = React.useRef<Array<HTMLTableColElement | null>>([]);
+  /** Same for the footer table — kept in sync during drag so footer widths don't lag. */
+  const footerColElemsRef = React.useRef<Array<HTMLTableColElement | null>>([]);
   const theadRef = React.useRef<HTMLTableSectionElement | null>(null);
+  const firstVisibleRecordRef = React.useRef<HTMLTableSectionElement | null>(null);
   const [headerHeightPx, setHeaderHeightPx] = useState(0);
+  const [measuredRecordHeightPx, setMeasuredRecordHeightPx] = useState<number | null>(null);
 
   // ── Cross-filter index chains ─────────────────────────────────────────────────
   const crossFilterRows = useMemo(() => {
@@ -279,10 +426,10 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
       return result;
     }
     const fieldByName = new Map<string, Field>();
-    for (const f of data.fields) {
+    for (const f of visibleData.fields) {
       fieldByName.set(getDisplayName(f), f);
     }
-    let prefixIndices: number[] = Array.from({ length: data.length }, (_, i) => i);
+    let prefixIndices: number[] = Array.from({ length: visibleData.length }, (_, i) => i);
     for (const fieldName of crossFilterOrder) {
       const filterValue = filter[fieldName];
       const field = fieldByName.get(fieldName);
@@ -294,7 +441,16 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
       result[fieldName] = prefixIndices;
     }
     return result;
-  }, [data, filter, crossFilterOrder]);
+  }, [visibleData, filter, crossFilterOrder]);
+
+  React.useEffect(() => {
+    onSortByChange?.(
+      sortColumns.map((col) => ({
+        displayName: String(col.columnKey),
+        desc: col.direction === 'DESC',
+      }))
+    );
+  }, [sortColumns, onSortByChange]);
 
   // ── Sort handler ─────────────────────────────────────────────────────────────
   const handleHeaderClick = useCallback((cell: HeaderCell) => {
@@ -335,11 +491,16 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
         return;
       }
       const deltaX = event.clientX - resizeStartXRef.current;
-      const newWidth = Math.max(50, resizeStartWidthRef.current + deltaX);
+      const minWidth = columnMinWidthsRef.current[resizingColumn] ?? COLUMN.MIN_WIDTH;
+      const newWidth = Math.max(minWidth, resizeStartWidthRef.current + deltaX);
       // Write directly to <col> — avoids React re-render during drag.
       const col = colElemsRef.current[resizingColumn];
       if (col) {
         col.style.width = `${newWidth}px`;
+      }
+      const footerCol = footerColElemsRef.current[resizingColumn];
+      if (footerCol) {
+        footerCol.style.width = `${newWidth}px`;
       }
       pendingWidthRef.current = newWidth;
     },
@@ -382,38 +543,59 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
   }, [resizingColumn, handleResizeMove, handleResizeEnd]);
 
   // ── Header structure (from pipeline) ────────────────────────────────────────
-  const { headerRows, columns } = useMemo(() => {
+  const { headerRows, columns, maxDepth } = useMemo(() => {
     const useGrouped =
       columnGrouping.enabled &&
-      columnGrouping.rootGroups &&
-      columnGrouping.rootGroups.length > 0;
+      normalizedRootGroups.length > 0;
 
     if (!useGrouped) {
-      return buildSimpleHeaderStructure(data);
+      return buildSimpleHeaderStructure(visibleData);
     }
-    return buildGroupedHeaderStructure(data, columnGrouping.rootGroups!);
-  }, [data, columnGrouping]);
+    return buildGroupedHeaderStructure(visibleData, normalizedRootGroups);
+  }, [visibleData, columnGrouping.enabled, normalizedRootGroups]);
+
+  const initialColumnWidths = useMemo(() => {
+    const rootFields = columns.map((column) => column.fields[0]).filter(Boolean);
+    return computeColWidths(rootFields, width);
+  }, [columns, width]);
+  React.useEffect(() => {
+    columnMinWidthsRef.current = columns.map((column) => column.fields[0]?.config?.custom?.minWidth ?? COLUMN.MIN_WIDTH);
+  }, [columns]);
+
+  const footerFields = useMemo(
+    () => columns.map((column) => column.fields[column.fields.length - 1] ?? column.fields[0]),
+    [columns]
+  );
+  const footerConfigs = useMemo(() => footerFields.map((field) => field?.config.custom?.footer), [footerFields]);
+  const hasFooter = useMemo(
+    () => footerFields.some((field) => Boolean(field?.config.custom?.footer?.reducers?.length)),
+    [footerFields]
+  );
 
   // ── Filtered + sorted indices ────────────────────────────────────────────────
   const filteredSortedIndices = useMemo(() => {
-    let indices = filterIndices(data, filter);
+    let indices = filterIndices(visibleData, filter);
     if (sortColumns.length > 0) {
       const tempRows: TableRow[] = indices.map((i) => {
         const row: TableRow = { __depth: 0, __index: i };
-        for (const field of data.fields) {
+        for (const field of visibleData.fields) {
           row[getDisplayName(field)] = field.values[i];
         }
         return row;
       });
-      const sorted = applySort(tempRows, data.fields, sortColumns, columnTypes, false);
+      const sorted = applySort(tempRows, visibleData.fields, sortColumns, columnTypes, false);
       indices = sorted.map((row) => row.__index as number);
     }
     return indices;
-  }, [data, filter, sortColumns, columnTypes]);
+  }, [visibleData, filter, sortColumns, columnTypes]);
+  const filteredSortedRows = useMemo(
+    () => filteredSortedIndices.map((i) => groupedRows[i]),
+    [filteredSortedIndices, groupedRows]
+  );
 
   // ── Pagination ───────────────────────────────────────────────────────────────
   const numRows = filteredSortedIndices.length;
-  const maxFieldDepth = useMemo(() => Math.max(...columns.map((col) => col.fields.length), 1), [columns]);
+
 
   const [page, setPage] = useState(0);
   const paginationEnabled = Boolean(enablePagination);
@@ -464,8 +646,8 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
   }, [numRows, page, rowsPerPage, paginationEnabled]);
 
   // ── Virtual scroll ───────────────────────────────────────────────────────────
-  /** Estimated height per logical record (one record = maxFieldDepth visual rows). */
-  const recordHeightPx = maxFieldDepth * DEFAULT_ROW_HEIGHT_PX;
+  /** Estimated height per logical record (one record = maxDepth visual rows). */
+  const recordHeightPx = measuredRecordHeightPx ?? maxDepth * DEFAULT_ROW_HEIGHT_PX;
   const { scrollContainerRef, virtualWindow } = useVirtualScroll({
     totalRecords: pageRowIndices.length,
     recordHeightPx,
@@ -496,6 +678,32 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
     };
   }, [hasHeader, headerRows]);
 
+  React.useEffect(() => {
+    const recordEl = firstVisibleRecordRef.current;
+    if (!recordEl) {
+      return;
+    }
+
+    const updateRecordHeight = () => {
+      const nextHeight = Math.ceil(recordEl.getBoundingClientRect().height);
+      if (nextHeight > 0) {
+        setMeasuredRecordHeightPx((prev) => (prev === nextHeight ? prev : nextHeight));
+      }
+    };
+
+    updateRecordHeight();
+
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
+
+    const observer = new ResizeObserver(updateRecordHeight);
+    observer.observe(recordEl);
+    return () => {
+      observer.disconnect();
+    };
+  }, [pageRowIndices, virtualWindow.startIndex, virtualWindow.endIndex, maxDepth, columns.length]);
+
   // Reset scroll position when the page changes so new page always starts at top.
   React.useEffect(() => {
     if (scrollContainerRef.current) {
@@ -505,48 +713,48 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
   }, [page]);
 
   // ── Display value cache ──────────────────────────────────────────────────────
-  /** Cleared whenever `data` changes; filled lazily during body render. */
-  const displayValueCache = useMemo(() => new Map<string, string>(), []);
+  /** Cleared whenever visible data changes; filled lazily during body render. */
+  const displayValueCache = useMemo(() => new Map<string, string>(), [visibleData]);
 
   // ── Cell plan ────────────────────────────────────────────────────────────────
   const cellPlanByDepth = useMemo<CellPlan[][]>(
-    () => buildCellPlanByDepth(columns, maxFieldDepth),
-    [columns, maxFieldDepth]
+    () => buildCellPlanByDepth(columns, maxDepth),
+    [columns, maxDepth]
   );
 
   // ── Guard: grouping must be enabled ─────────────────────────────────────────
-  const hasGroups = columnGrouping.rootGroups && columnGrouping.rootGroups.length > 0;
-  if (!columnGrouping.enabled || !hasGroups) {
+  if (!columnGrouping.enabled) {
     return <div>Column grouping is not enabled</div>;
   }
 
   // ── Render helpers ───────────────────────────────────────────────────────────
 
-  /** Renders a single logical record (possibly multiple <tr> elements). */
-  const renderRecord = (pos: number, recordIndexInPage: number) => {
+  /** Renders a single logical record wrapped in its own <tbody>.
+   *  Grouping sub-rows under one <tbody> lets CSS `tbody:hover > tr` highlight
+   *  the full logical record without triggering leave/enter flicker between sub-rows. */
+  const renderRecord = (pos: number, recordIndexInPage: number, isFirstVisible: boolean) => {
     // `pos` is a position in filteredSortedIndices; `recordIndexInPage` drives alternation.
-    return Array.from({ length: maxFieldDepth }, (_, fieldDepth) => (
-      <tr
-        key={`${pos}-${fieldDepth}`}
-        className={cx(styles.dataRow, recordIndexInPage % 2 === 0 && styles.dataRowEven)}
+    const originalRowIndex = filteredSortedIndices[pos];
+    return (
+      <tbody
+        key={pos}
+        ref={(node) => {
+          if (isFirstVisible) {
+            firstVisibleRecordRef.current = node;
+          }
+        }}
+        className={cx(styles.recordGroup, recordIndexInPage % 2 === 0 && styles.recordGroupEven)}
       >
+      {Array.from({ length: maxDepth }, (_, fieldDepth) => (
+        <tr
+          key={fieldDepth}
+          className={styles.dataRow}
+        >
         {cellPlanByDepth[fieldDepth].map(
-          ({ colIndex, field: filteredField, colSpan, rowSpan, isPlaceholder }: CellPlan) => {
-            if (isPlaceholder) {
-              return (
-                <td
-                  key={`${fieldDepth}-${colIndex}-empty`}
-                  className={styles.dataCell}
-                  colSpan={colSpan}
-                />
-              );
-            }
-
+          ({ colIndex, field: filteredField, colSpan, rowSpan }: CellPlan) => {
             if (!filteredField) {
               return null;
             }
-
-            const originalRowIndex = filteredSortedIndices[pos];
             const value = filteredField.values[originalRowIndex];
             const cacheKey = `${filteredField.name}:${originalRowIndex}`;
             let displayValue = displayValueCache.get(cacheKey);
@@ -564,20 +772,97 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
             const cellInspect = filteredField.config?.custom?.inspect;
             const showActions = cellInspect || showFilters;
             const wrapText = filteredField.config?.custom?.wrapText;
+            const textAlign = getAlignment(filteredField);
+            const justifyContent = getJustifyContent(textAlign);
+            const cellOptions = getCellOptions(filteredField);
+            const CellType = getCellRenderer(filteredField, cellOptions);
+            const columnWidth = columnWidths.get(colIndex) ?? initialColumnWidths[colIndex] ?? COLUMN.DEFAULT_WIDTH;
+            const styleFieldName = filteredField.config.custom?.styleField;
+            const styleField = styleFieldName ? data.fields.find(predicateByName(styleFieldName)) : undefined;
+            const styleValue = styleField ? styleField.values[originalRowIndex] : undefined;
+            const displayValueObj = filteredField.display ? filteredField.display(value) : undefined;
 
             const links = filteredField.getLinks
               ? filteredField.getLinks({ valueRowIndex: originalRowIndex })
               : undefined;
             const hasLinks = Boolean(links && links.length > 0);
 
+            const inlineStyle: React.CSSProperties = {
+              justifyContent,
+              textAlign,
+              ...(maxRowHeight != null ? { maxHeight: maxRowHeight, overflow: 'hidden' } : null),
+              ...(displayValueObj ? getCellColorInlineStyles(cellOptions, displayValueObj, false) : null),
+              ...(parseStyleJson(styleValue) ?? null),
+            };
+
+            const renderedValue = (
+              <div
+                className={cx(styles.cellRenderWrap, !wrapText && styles.cellNoWrap, maxRowHeight != null && styles.clampWrap)}
+                style={inlineStyle}
+                title={!wrapText ? displayValue : undefined}
+              >
+                <CellType
+                  cellOptions={cellOptions}
+                  frame={visibleData}
+                  field={filteredField}
+                  height={typeof defaultRowHeight === 'number' ? defaultRowHeight : DEFAULT_ROW_HEIGHT_PX}
+                  rowIdx={originalRowIndex}
+                  theme={theme}
+                  value={value}
+                  width={columnWidth}
+                  timeRange={timeRange}
+                  cellInspect={!!cellInspect}
+                  showFilters={showFilters}
+                  getActions={(field, rowIdx) => getActions(visibleData, field, rowIdx)}
+                  disableSanitizeHtml={disableSanitizeHtml}
+                  getTextColorForBackground={getTextColorForBackground}
+                />
+              </div>
+            );
+
+            const tooltipFieldName = filteredField.config.custom?.tooltip?.field;
+            const tooltipField = tooltipFieldName ? data.fields.find(predicateByName(tooltipFieldName)) : undefined;
+            const tooltipPlacement = filteredField.config.custom?.tooltip?.placement ?? TableCellTooltipPlacement.Auto;
+            let tooltipContent: React.ReactNode = null;
+            if (tooltipField) {
+              const tooltipOptions = getCellOptions(tooltipField);
+              const TooltipRenderer = getCellRenderer(tooltipField, tooltipOptions);
+              tooltipContent = (
+                <div style={{ width: tooltipField.config.custom?.width ?? columnWidth, padding: theme.spacing(0.5) }}>
+                  <TooltipRenderer
+                    cellOptions={tooltipOptions}
+                    frame={visibleData}
+                    field={tooltipField}
+                    height={typeof defaultRowHeight === 'number' ? defaultRowHeight : DEFAULT_ROW_HEIGHT_PX}
+                    rowIdx={originalRowIndex}
+                    theme={theme}
+                    value={tooltipField.values[originalRowIndex]}
+                    width={tooltipField.config.custom?.width ?? columnWidth}
+                    timeRange={timeRange}
+                    cellInspect={false}
+                    showFilters={false}
+                    getActions={(field, rowIdx) => getActions(visibleData, field, rowIdx)}
+                    disableSanitizeHtml={disableSanitizeHtml}
+                    getTextColorForBackground={getTextColorForBackground}
+                  />
+                </div>
+              );
+            }
+
             const cellContent = (
-              <div className={styles.cellLine}>
-                <span
-                  className={wrapText ? styles.cellWrap : styles.cellNoWrap}
-                  title={!wrapText ? displayValue : undefined}
-                >
-                  {displayValue}
-                </span>
+              <div
+                className={styles.cellLine}
+                style={{
+                  minHeight: perLineMinHeight,
+                }}
+              >
+                {tooltipContent ? (
+                  <GroupedCellTooltip content={tooltipContent} placement={tooltipPlacement}>
+                    {renderedValue}
+                  </GroupedCellTooltip>
+                ) : (
+                  renderedValue
+                )}
                 {showActions && (
                   <TableCellActions
                     field={filteredField}
@@ -597,6 +882,20 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
               <td
                 key={`${fieldDepth}-${colIndex}`}
                 className={styles.dataCell}
+                onMouseEnter={(e) => {
+                  const actions = e.currentTarget.querySelector<HTMLElement>('[data-role="cell-actions"]');
+                  if (actions) {
+                    actions.style.opacity = '1';
+                    actions.style.pointerEvents = 'auto';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  const actions = e.currentTarget.querySelector<HTMLElement>('[data-role="cell-actions"]');
+                  if (actions) {
+                    actions.style.opacity = '0';
+                    actions.style.pointerEvents = 'none';
+                  }
+                }}
                 colSpan={colSpan}
                 rowSpan={rowSpan}
               >
@@ -611,8 +910,10 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
             );
           }
         )}
-      </tr>
-    ));
+        </tr>
+      ))}
+      </tbody>
+    );
   };
 
   // ── JSX ──────────────────────────────────────────────────────────────────────
@@ -629,7 +930,7 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
            */}
           <colgroup>
             {columns.map((_, i) => {
-              const w = columnWidths.get(i);
+              const w = columnWidths.get(i) ?? initialColumnWidths[i];
               return (
                 <col
                   key={i}
@@ -658,47 +959,51 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
                           rowSpan={cell.rowSpan}
                           className={cx(
                             styles.headerCell,
+                            cell.isFilterable && cell.field && styles.headerCellFilterable,
                             wrapHeaderText ? styles.headerCellWrap : styles.headerCellNoWrap,
                             cell.isSortable && styles.headerCellClickable
                           )}
                           onClick={() => cell.isSortable && handleHeaderClick(cell)}
                         >
                           <div className={styles.headerCellContent}>
-                            {showTypeIcons && cell.field && (
-                              <Icon
-                                className={styles.headerCellIcon}
-                                name={getFieldTypeIcon(cell.field) as any}
-                                title={cell.field.type}
-                                size="sm"
-                              />
-                            )}
-                            <span>{cell.name}</span>
-                            {cell.field &&
-                              (() => {
-                                const fieldName = getDisplayName(cell.field);
-                                const activeSort = sortColumns.find(
-                                  (sc) => sc.columnKey === fieldName
-                                );
-                                if (!activeSort) {
-                                  return null;
-                                }
-                                return (
-                                  <Icon
-                                    name={activeSort.direction === 'ASC' ? 'arrow-up' : 'arrow-down'}
-                                    size="lg"
-                                  />
-                                );
-                              })()}
+                            <span className={styles.headerCellLabel}>
+                              {showTypeIcons && cell.field && (
+                                <Icon
+                                  className={styles.headerCellIcon}
+                                  name={getFieldTypeIcon(cell.field) as any}
+                                  title={cell.field.type}
+                                  size="sm"
+                                />
+                              )}
+                              <span>{cell.name}</span>
+                              {cell.field &&
+                                (() => {
+                                  const fieldName = getDisplayName(cell.field);
+                                  const activeSort = sortColumns.find(
+                                    (sc) => sc.columnKey === fieldName
+                                  );
+                                  if (!activeSort) {
+                                    return null;
+                                  }
+                                  return (
+                                    <Icon
+                                      name={activeSort.direction === 'ASC' ? 'arrow-up' : 'arrow-down'}
+                                      size="lg"
+                                    />
+                                  );
+                                })()}
+                            </span>
                             {cell.isFilterable && cell.field && (
                               <Filter
                                 name={getDisplayName(cell.field)}
-                                data={data}
+                                data={visibleData}
                                 filter={filter}
                                 setFilter={setFilter}
                                 field={cell.field}
                                 crossFilterOrder={crossFilterOrder}
                                 crossFilterRows={crossFilterRows}
                                 iconClassName={styles.headerCellIcon}
+                                buttonClassName={styles.headerFilterButton}
                               />
                             )}
                           </div>
@@ -714,30 +1019,68 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
             </thead>
           )}
 
-          <tbody>
-            {/* Top spacer — compensates for records rendered above the virtual window */}
-            {virtualWindow.topSpacerPx > 0 && (
+          {/* Top spacer — compensates for records rendered above the virtual window */}
+          {virtualWindow.topSpacerPx > 0 && (
+            <tbody>
               <tr style={{ height: virtualWindow.topSpacerPx }}>
                 <td colSpan={columns.length} style={{ padding: 0, border: 'none' }} />
               </tr>
+            </tbody>
+          )}
+
+          {/* Visible records — each logical record in its own <tbody> for hover correctness */}
+          {pageRowIndices
+            .slice(virtualWindow.startIndex, virtualWindow.endIndex)
+            .map((pos, visibleIdx) =>
+              renderRecord(pos, virtualWindow.startIndex + visibleIdx, visibleIdx === 0)
             )}
 
-            {/* Visible records only */}
-            {pageRowIndices
-              .slice(virtualWindow.startIndex, virtualWindow.endIndex)
-              .flatMap((pos, visibleIdx) =>
-                renderRecord(pos, virtualWindow.startIndex + visibleIdx)
-              )}
-
-            {/* Bottom spacer — compensates for records rendered below the virtual window */}
-            {virtualWindow.bottomSpacerPx > 0 && (
+          {/* Bottom spacer — compensates for records rendered below the virtual window */}
+          {virtualWindow.bottomSpacerPx > 0 && (
+            <tbody>
               <tr style={{ height: virtualWindow.bottomSpacerPx }}>
                 <td colSpan={columns.length} style={{ padding: 0, border: 'none' }} />
               </tr>
-            )}
-          </tbody>
+            </tbody>
+          )}
         </table>
       </div>
+
+      {hasFooter && (
+        <table className={styles.table}>
+          <colgroup>
+            {columns.map((_, i) => {
+              const w = columnWidths.get(i) ?? initialColumnWidths[i];
+              return (
+                <col
+                  key={i}
+                  ref={(el) => { footerColElemsRef.current[i] = el; }}
+                  style={w ? { width: `${w}px` } : undefined}
+                />
+              );
+            })}
+          </colgroup>
+          <tfoot>
+            <tr className={styles.footerRow}>
+              {footerFields.map((field, i) => (
+                <td key={i} className={styles.footerCell}>
+                  {field ? (
+                    <SummaryCell
+                      rows={filteredSortedRows}
+                      footers={footerConfigs}
+                      field={field}
+                      colIdx={i}
+                      textAlign={getAlignment(field)}
+                      rowLabel={i === 0}
+                      hideLabel={i !== 0}
+                    />
+                  ) : null}
+                </td>
+              ))}
+            </tr>
+          </tfoot>
+        </table>
+      )}
 
       {paginationEnabled && numPages > 1 && (
         <div className={styles.paginationContainer}>

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { StandardEditorProps, GrafanaTheme2 } from '@grafana/data';
-import { Button, Field, Switch, VerticalGroup, HorizontalGroup, Icon, Select, RadioButtonGroup, useStyles2 } from '@grafana/ui';
+import { Button, Field, Switch, VerticalGroup, Icon, Select, RadioButtonGroup, useStyles2 } from '@grafana/ui';
 import { css } from '@emotion/css';
 import {
   ColumnGroupingSettings,
@@ -173,14 +173,15 @@ export const ColumnGroupingEditorV2: React.FC<Props> = ({ value, onChange, conte
 
   const renderGroupItem = (item: GroupItem, parentId: string, depth = 0): JSX.Element => {
     const isExpanded = expandedItems[item.id] ?? true;
+    const indentPx = depth * 12;
 
     if (item.type === 'column') {
       // Render column item
       return (
-        <div key={item.id} className={styles.columnItem} style={{ marginLeft: `${depth * 20}px` }}>
-          <HorizontalGroup justify="space-between" align="center">
+        <div key={item.id} className={styles.columnItem} style={{ marginLeft: `${indentPx}px` }}>
+          <div className={styles.columnRow}>
             <Icon name="file-blank" />
-            <Field label="" style={{ flex: 1, marginBottom: 0 }}>
+            <div className={styles.selectWrap}>
               <Select
                 options={availableColumns}
                 value={item.column}
@@ -190,7 +191,7 @@ export const ColumnGroupingEditorV2: React.FC<Props> = ({ value, onChange, conte
                 placeholder="Select column"
                 isClearable
               />
-            </Field>
+            </div>
             <Button
               variant="destructive"
               size="sm"
@@ -199,7 +200,7 @@ export const ColumnGroupingEditorV2: React.FC<Props> = ({ value, onChange, conte
             >
               Delete
             </Button>
-          </HorizontalGroup>
+          </div>
         </div>
       );
     }
@@ -207,7 +208,7 @@ export const ColumnGroupingEditorV2: React.FC<Props> = ({ value, onChange, conte
     if (item.type === 'group-container') {
       // Render group container
       return (
-        <div key={item.id} className={styles.groupContainer} style={{ marginLeft: `${depth * 20}px` }}>
+        <div key={item.id} className={styles.groupContainer} style={{ marginLeft: `${indentPx}px` }}>
           <div className={styles.groupHeader} onClick={() => toggleExpanded(item.id)}>
             <Icon name={isExpanded ? 'angle-down' : 'angle-right'} />
             <Icon name="folder" />
@@ -227,10 +228,8 @@ export const ColumnGroupingEditorV2: React.FC<Props> = ({ value, onChange, conte
 
           {isExpanded && (
             <div className={styles.groupContent}>
-              <Field
-                label="Child elements orientation"
-                description="Defines how child elements are arranged"
-              >
+              <div className={styles.controlBlock}>
+                <div className={styles.controlLabel}>Children layout</div>
                 <RadioButtonGroup
                   options={[
                     { label: 'Vertical', value: 'vertical' as Orientation },
@@ -241,11 +240,11 @@ export const ColumnGroupingEditorV2: React.FC<Props> = ({ value, onChange, conte
                     handleUpdateChild(item.id, { orientation: v });
                   }}
                 />
-              </Field>
+              </div>
 
               <div className={styles.childrenSection}>
                 {item.children.map((child) => renderGroupItem(child, item.id, depth + 1))}
-                <HorizontalGroup>
+                <div className={styles.actionsRow}>
                   <Button
                     variant="secondary"
                     size="sm"
@@ -262,7 +261,7 @@ export const ColumnGroupingEditorV2: React.FC<Props> = ({ value, onChange, conte
                   >
                     Add group
                   </Button>
-                </HorizontalGroup>
+                </div>
               </div>
             </div>
           )}
@@ -298,7 +297,8 @@ export const ColumnGroupingEditorV2: React.FC<Props> = ({ value, onChange, conte
 
         {isExpanded && (
           <div className={styles.rootGroupContent}>
-            <Field label="Main column" description="Column that will be the group header">
+            <div className={styles.controlBlock}>
+              <div className={styles.controlLabel}>Main column</div>
               <Select
                 options={availableColumns}
                 value={rootGroup.column}
@@ -308,12 +308,10 @@ export const ColumnGroupingEditorV2: React.FC<Props> = ({ value, onChange, conte
                 placeholder="Select column"
                 isClearable
               />
-            </Field>
+            </div>
 
-            <Field
-              label="Child elements orientation"
-              description="Defines how child elements are arranged"
-            >
+            <div className={styles.controlBlock}>
+              <div className={styles.controlLabel}>Children layout</div>
               <RadioButtonGroup
                 options={[
                   { label: 'Vertical', value: 'vertical' as Orientation },
@@ -324,11 +322,11 @@ export const ColumnGroupingEditorV2: React.FC<Props> = ({ value, onChange, conte
                   handleUpdateRootGroup(rootGroup.id, { orientation: v });
                 }}
               />
-            </Field>
+            </div>
 
             <div className={styles.childrenSection}>
               {rootGroup.children.map((child) => renderGroupItem(child, rootGroup.id, 0))}
-              <HorizontalGroup>
+              <div className={styles.actionsRow}>
                 <Button
                   variant="secondary"
                   size="sm"
@@ -345,7 +343,7 @@ export const ColumnGroupingEditorV2: React.FC<Props> = ({ value, onChange, conte
                 >
                   Add group
                 </Button>
-              </HorizontalGroup>
+              </div>
             </div>
           </div>
         )}
@@ -380,14 +378,16 @@ const getStyles = (theme: GrafanaTheme2) => ({
   groupsContainer: css({
     border: `1px solid ${theme.colors.border.weak}`,
     borderRadius: theme.shape.radius.default,
-    padding: theme.spacing(1.5),
+    padding: theme.spacing(1),
     background: theme.colors.background.secondary,
   }),
   headerRow: css({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: theme.spacing(1.5),
+    marginBottom: theme.spacing(1),
+    gap: theme.spacing(1),
+    flexWrap: 'wrap',
 
     h3: {
       margin: 0,
@@ -398,36 +398,13 @@ const getStyles = (theme: GrafanaTheme2) => ({
   rootGroup: css({
     border: `1px solid ${theme.colors.border.medium}`,
     borderRadius: theme.shape.radius.default,
-    marginBottom: theme.spacing(1),
+    marginBottom: theme.spacing(0.75),
     background: theme.colors.background.primary,
   }),
   rootGroupHeader: css({
     display: 'flex',
     alignItems: 'center',
-    gap: theme.spacing(0.75),
-    padding: theme.spacing(1, 1.25),
-    cursor: 'pointer',
-    userSelect: 'none',
-    background: theme.colors.background.secondary,
-    borderRadius: `${theme.shape.radius.default} ${theme.shape.radius.default} 0 0`,
-
-    '&:hover': {
-      background: theme.colors.emphasize(theme.colors.background.secondary, 0.03),
-    },
-  }),
-  rootGroupContent: css({
-    padding: theme.spacing(1.25),
-  }),
-  groupContainer: css({
-    border: `1px solid ${theme.colors.border.weak}`,
-    borderRadius: theme.shape.radius.default,
-    marginBottom: theme.spacing(0.75),
-    background: theme.colors.background.primary,
-  }),
-  groupHeader: css({
-    display: 'flex',
-    alignItems: 'center',
-    gap: theme.spacing(0.75),
+    gap: theme.spacing(0.5),
     padding: theme.spacing(0.75, 1),
     cursor: 'pointer',
     userSelect: 'none',
@@ -438,23 +415,79 @@ const getStyles = (theme: GrafanaTheme2) => ({
       background: theme.colors.emphasize(theme.colors.background.secondary, 0.03),
     },
   }),
+  rootGroupContent: css({
+    padding: theme.spacing(0.875, 1),
+    display: 'flex',
+    flexDirection: 'column',
+    gap: theme.spacing(0.75),
+  }),
+  groupContainer: css({
+    border: `1px solid ${theme.colors.border.weak}`,
+    borderRadius: theme.shape.radius.default,
+    marginBottom: theme.spacing(0.5),
+    background: theme.colors.background.primary,
+  }),
+  groupHeader: css({
+    display: 'flex',
+    alignItems: 'center',
+    gap: theme.spacing(0.5),
+    padding: theme.spacing(0.625, 0.875),
+    cursor: 'pointer',
+    userSelect: 'none',
+    background: theme.colors.background.secondary,
+    borderRadius: `${theme.shape.radius.default} ${theme.shape.radius.default} 0 0`,
+
+    '&:hover': {
+      background: theme.colors.emphasize(theme.colors.background.secondary, 0.03),
+    },
+  }),
   groupContent: css({
-    padding: theme.spacing(1),
+    padding: theme.spacing(0.75, 0.875),
+    display: 'flex',
+    flexDirection: 'column',
+    gap: theme.spacing(0.75),
   }),
   groupTitle: css({
     flex: 1,
     fontWeight: theme.typography.fontWeightMedium,
     fontSize: theme.typography.size.sm,
+    minWidth: 0,
   }),
   childrenSection: css({
-    marginTop: theme.spacing(0.75),
+    marginTop: theme.spacing(0.25),
     paddingTop: 0,
+  }),
+  controlBlock: css({
+    display: 'flex',
+    flexDirection: 'column',
+    gap: theme.spacing(0.375),
+  }),
+  controlLabel: css({
+    color: theme.colors.text.secondary,
+    fontSize: theme.typography.bodySmall.fontSize,
+    fontWeight: theme.typography.fontWeightMedium,
+    lineHeight: 1.2,
   }),
   columnItem: css({
     border: `1px solid ${theme.colors.border.weak}`,
     borderRadius: theme.shape.radius.default,
-    padding: theme.spacing(0.75),
-    marginBottom: theme.spacing(0.75),
+    padding: theme.spacing(0.5, 0.625),
+    marginBottom: theme.spacing(0.5),
     background: theme.colors.background.primary,
+  }),
+  columnRow: css({
+    display: 'flex',
+    alignItems: 'center',
+    gap: theme.spacing(0.625),
+  }),
+  selectWrap: css({
+    flex: 1,
+    minWidth: 0,
+  }),
+  actionsRow: css({
+    display: 'flex',
+    gap: theme.spacing(0.5),
+    flexWrap: 'wrap',
+    marginTop: theme.spacing(0.5),
   }),
 });

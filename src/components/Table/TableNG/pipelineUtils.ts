@@ -67,12 +67,14 @@ export interface CellPlan {
  * the tbody render loop.
  *
  * Rules:
- * - A single-field column at depth 0 gets rowSpan = maxFieldDepth so that it
- *   spans all sub-rows for that record.
+ * - The last field of any column (single- or multi-field) gets
+ *   rowSpan = maxFieldDepth - depth so it spans all remaining body sub-rows.
+ *   This mirrors the header's rowSpan for the same cell and eliminates the
+ *   need for alignment-only placeholder cells.
  * - Consecutive columns that share the same field at a given depth are merged
  *   into one cell via colSpan.
- * - A multi-field column that has no field at `depth` emits an entry with
- *   `isPlaceholder: true` to keep column alignment.
+ * - Depths beyond a column's last field are skipped (covered by the rowSpan
+ *   of the last field, same as single-field columns were already handled).
  */
 export function buildCellPlanByDepth(columns: ColumnInfo[], maxFieldDepth: number): CellPlan[][] {
   const plans: CellPlan[][] = Array.from({ length: maxFieldDepth }, () => []);
@@ -82,17 +84,10 @@ export function buildCellPlanByDepth(columns: ColumnInfo[], maxFieldDepth: numbe
     while (colIndex < columns.length) {
       const col = columns[colIndex];
 
-      // Single-field column already rendered at depth=0 with rowSpan; skip deeper levels.
-      if (col.fields.length === 1 && depth > 0) {
-        colIndex += 1;
-        continue;
-      }
-
-      if (depth >= col.fields.length) {
-        // Multi-field column with no data at this depth → alignment-only placeholder.
-        if (col.fields.length > 1) {
-          plans[depth].push({ colIndex, fieldKey: '', colSpan: 1, rowSpan: 1, isPlaceholder: true });
-        }
+      // Skip columns whose last field already spans this depth via rowSpan.
+      // - single-field: rendered at depth=0 with rowSpan=maxFieldDepth, absent at depth > 0.
+      // - multi-field: last field spans remaining depths, absent beyond field count.
+      if ((col.fields.length === 1 && depth > 0) || depth >= col.fields.length) {
         colIndex += 1;
         continue;
       }
@@ -121,7 +116,10 @@ export function buildCellPlanByDepth(columns: ColumnInfo[], maxFieldDepth: numbe
         }
       }
 
-      const rowSpan = col.fields.length === 1 && maxFieldDepth > 1 && depth === 0 ? maxFieldDepth : 1;
+      // The last field of a column spans all remaining body sub-rows so its
+      // visual extent matches the header rowSpan for the same position.
+      const isLastField = depth === col.fields.length - 1;
+      const rowSpan = isLastField && maxFieldDepth > depth + 1 ? maxFieldDepth - depth : 1;
       plans[depth].push({ colIndex, fieldKey: key, field, colSpan, rowSpan, isPlaceholder: false });
       colIndex += colSpan;
     }

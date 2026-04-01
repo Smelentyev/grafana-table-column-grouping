@@ -8,7 +8,7 @@ export const TableCellActions = memo(
   ({ field, value, setInspectCell, onCellFilterAdded, className, cellInspect, showFilters }: TableCellActionsProps) => (
     // stopping propagation to prevent clicks within the actions menu from triggering the cell click events
     // for things like the data links tooltip.
-    <div className={className} onClick={(ev) => ev.stopPropagation()}>
+    <div className={className} data-role="cell-actions" onClick={(ev) => ev.stopPropagation()}>
       {cellInspect && (
         <IconButton
           name="eye"

@@ -24,6 +24,77 @@ function findFieldById(fields: Field[], id: string): Field | undefined {
   return fields.find((f) => f.name === id || getDisplayName(f) === id);
 }
 
+function cloneRootGroup(rootGroup: RootGroupItem, children: GroupChild[]): RootGroupItem {
+  return {
+    ...rootGroup,
+    children,
+  };
+}
+
+function normalizeGroupChild(item: GroupChild, fields: Field[]): GroupChild[] {
+  if (item.type === 'column') {
+    return findFieldById(fields, item.column) ? [item] : [];
+  }
+
+  const normalizedChildren = item.children.flatMap((child) => normalizeGroupChild(child, fields));
+
+  if (item.type === 'group-container') {
+    if (normalizedChildren.length === 0) {
+      return [];
+    }
+
+    return [
+      {
+        ...item,
+        children: normalizedChildren,
+      },
+    ];
+  }
+
+  const hasOwnField = Boolean(findFieldById(fields, item.column));
+  if (hasOwnField) {
+    return [cloneRootGroup(item, normalizedChildren)];
+  }
+
+  if (normalizedChildren.length === 0) {
+    return [];
+  }
+
+  return [
+    {
+      id: `${item.id}-normalized-container`,
+      type: 'group-container',
+      orientation: item.orientation,
+      children: normalizedChildren,
+    },
+  ];
+}
+
+export function normalizeRootGroups(rootGroups: RootGroupItem[], fields: Field[]): GroupChild[] {
+  const normalized: GroupChild[] = [];
+
+  for (const rootGroup of rootGroups) {
+    const hasOwnField = Boolean(findFieldById(fields, rootGroup.column));
+    const normalizedChildren = rootGroup.children.flatMap((child) => normalizeGroupChild(child, fields));
+
+    if (hasOwnField) {
+      normalized.push(cloneRootGroup(rootGroup, normalizedChildren));
+      continue;
+    }
+
+    if (normalizedChildren.length > 0) {
+      normalized.push({
+        id: `${rootGroup.id}-normalized-container`,
+        type: 'group-container',
+        orientation: rootGroup.orientation,
+        children: normalizedChildren,
+      });
+    }
+  }
+
+  return normalized;
+}
+
 // ─── Exported pure helpers ────────────────────────────────────────────────────
 
 /** Returns the number of header rows a GroupItem subtree occupies vertically. */
@@ -448,6 +519,8 @@ function processGroupItem(
 export interface GroupedHeaderStructure {
   headerRows: HeaderCell[][];
   columns: ColumnInfo[];
+  /** Number of thead rows; equals max(getGroupItemDepth) over all root groups. */
+  maxDepth: number;
 }
 
 /**
@@ -459,13 +532,13 @@ export interface GroupedHeaderStructure {
  */
 export function buildGroupedHeaderStructure(
   data: DataFrame,
-  rootGroups: RootGroupItem[]
+  rootGroups: GroupChild[]
 ): GroupedHeaderStructure {
   const { fields } = data;
 
   // Collect all field identifiers that belong to any group.
   const groupedFieldNames = new Set<string>();
-  const fieldToRootGroupMap = new Map<string, RootGroupItem>();
+  const fieldToRootGroupMap = new Map<string, GroupChild>();
 
   for (const rootGroup of rootGroups) {
     const fieldIds = getAllColumnsFromGroupItem(rootGroup);
@@ -474,23 +547,28 @@ export function buildGroupedHeaderStructure(
       if (f) {
         groupedFieldNames.add(f.name);
         groupedFieldNames.add(getDisplayName(f));
+        fieldToRootGroupMap.set(f.name, rootGroup);
+        fieldToRootGroupMap.set(getDisplayName(f), rootGroup);
       } else {
         groupedFieldNames.add(id);
       }
     }
-    const rootField = findFieldById(fields, rootGroup.column);
-    if (rootField) {
-      fieldToRootGroupMap.set(rootField.name, rootGroup);
-      fieldToRootGroupMap.set(getDisplayName(rootField), rootGroup);
-    } else {
-      fieldToRootGroupMap.set(rootGroup.column, rootGroup);
+
+    if (rootGroup.type === 'root-group') {
+      const rootField = findFieldById(fields, rootGroup.column);
+      if (rootField) {
+        fieldToRootGroupMap.set(rootField.name, rootGroup);
+        fieldToRootGroupMap.set(getDisplayName(rootField), rootGroup);
+      } else {
+        fieldToRootGroupMap.set(rootGroup.column, rootGroup);
+      }
     }
   }
 
   const maxDepth = Math.max(...rootGroups.map((rg) => getGroupItemDepth(rg)), 1);
   const columnsList: ColumnInfo[] = [];
   const rows: HeaderCell[][] = Array.from({ length: maxDepth }, () => []);
-  const processedRootGroups = new Set<RootGroupItem>();
+  const processedRootGroups = new Set<GroupChild>();
 
   for (const field of fields) {
     const rootGroup =
@@ -517,7 +595,7 @@ export function buildGroupedHeaderStructure(
     // Grouped non-root fields are processed as part of their root group — skip.
   }
 
-  return { headerRows: rows, columns: columnsList };
+  return { headerRows: rows, columns: columnsList, maxDepth };
 }
 
 /**
@@ -538,5 +616,5 @@ export function buildSimpleHeaderStructure(data: DataFrame): GroupedHeaderStruct
     })),
   ];
   const columns: ColumnInfo[] = data.fields.map((field) => ({ fields: [field] }));
-  return { headerRows, columns };
+  return { headerRows, columns, maxDepth: 1 };
 }
