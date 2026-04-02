@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.9 (2026-04-02)
+
+### Fixed
+- Adjusted the GitHub release workflow so release artifacts are still published while public-plugin signing is unavailable during Grafana review
+
+### Notes
+- Signing remains enabled as a non-blocking step and can be used after Grafana assigns a signature level
+
+
 ## 1.0.8 (2026-04-02)
 
 ### Fixed
