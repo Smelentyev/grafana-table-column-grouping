@@ -1,7 +1,6 @@
 import React, { CSSProperties, Key, ReactNode, useCallback, useMemo, useRef, useState, type JSX } from 'react';
 import { clsx } from 'clsx';
 import { memoize } from 'micro-memoize';
-import 'react-data-grid/lib/styles.css';
 import {
   Cell,
   CellRendererProps,

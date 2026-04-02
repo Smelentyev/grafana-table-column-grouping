@@ -23,12 +23,41 @@ export const getGridStyles = (theme: GrafanaTheme2, enablePagination?: boolean, 
 
   return {
     grid: css({
+      '&.rdg': {
+        display: 'grid',
+        contain: 'content',
+        contentVisibility: 'auto',
+        boxSizing: 'border-box',
+        overflow: 'auto',
+        backgroundColor: 'var(--rdg-background-color)',
+        color: 'var(--rdg-color)',
+        fontSize: 'var(--rdg-font-size, 14px)',
+        blockSize: enablePagination ? 'calc(100% - 32px)' : '100%',
+      },
+      '&.rdg, &.rdg *, &.rdg *::before, &.rdg *::after': {
+        boxSizing: 'inherit',
+      },
+      '&.rdg::before': {
+        content: '""',
+        gridColumn: '1 / -1',
+        gridRow: '1 / -1',
+      },
       '--rdg-background-color': bgColor,
       '--rdg-header-background-color': bgColor,
+      '--rdg-header-draggable-background-color': theme.colors.action.hover,
       '--rdg-border-color': borderColor,
       '--rdg-color': theme.colors.text.primary,
       '--rdg-summary-border-color': borderColor,
       '--rdg-summary-border-width': '1px',
+      '--rdg-border-width': '1px',
+      '--rdg-cell-frozen-box-shadow': theme.isDark
+        ? '2px 0 5px -2px rgba(136, 136, 136, 0.3)'
+        : '2px 0 5px -2px rgba(136, 136, 136, 0.2)',
+      '--rdg-checkbox-focus-color': theme.colors.primary.border,
+      '--rdg-row-selected-background-color': theme.colors.action.selected,
+      '--rdg-row-selected-hover-background-color': theme.colors.action.hover,
+      '--rdg-selection-width': '2px',
+      '--rdg-font-size': theme.typography.body.fontSize,
 
       '--rdg-selection-color': theme.colors.info.transparent,
 
@@ -38,14 +67,108 @@ export const getGridStyles = (theme: GrafanaTheme2, enablePagination?: boolean, 
       '--rdg-row-hover-background-color': transparent
         ? theme.colors.background.primary
         : theme.colors.background.secondary,
-
-      // TODO: magic 32px number is unfortunate. it would be better to have the content
-      // flow using flexbox rather than hard-coding this size via a calc
-      blockSize: enablePagination ? 'calc(100% - 32px)' : '100%',
       scrollbarWidth: 'thin',
       scrollbarColor: `${scrollbarThumb} ${scrollbarTrack}`,
 
       border: 'none',
+
+      '& .rdg-row': {
+        display: 'contents',
+        backgroundColor: 'var(--rdg-background-color)',
+        '&:hover': {
+          backgroundColor: 'var(--rdg-row-hover-background-color)',
+        },
+        '&[aria-selected=true]': {
+          backgroundColor: 'var(--rdg-row-selected-background-color)',
+          '&:hover': {
+            backgroundColor: 'var(--rdg-row-selected-hover-background-color)',
+          },
+        },
+      },
+
+      '& .rdg-cell': {
+        position: 'relative',
+        paddingBlock: 0,
+        paddingInline: TABLE.CELL_PADDING,
+        borderInlineEnd: 'var(--rdg-border-width) solid var(--rdg-border-color)',
+        borderBlockEnd: 'var(--rdg-border-width) solid var(--rdg-border-color)',
+        gridRowStart: 'var(--rdg-grid-row-start)',
+        alignContent: 'center',
+        backgroundColor: 'inherit',
+        whiteSpace: 'nowrap',
+        overflow: 'clip',
+        textOverflow: 'ellipsis',
+        outline: 'none',
+        '&[aria-selected=true]': {
+          outline: 'var(--rdg-selection-width) solid var(--rdg-selection-color)',
+          outlineOffset: 'calc(var(--rdg-selection-width) * -1)',
+        },
+      },
+
+      '& .rdg-cell-frozen': {
+        position: 'sticky',
+        zIndex: 1,
+        boxShadow: 'var(--rdg-cell-frozen-box-shadow)',
+      },
+
+      '& .rdg-header-row': {
+        display: 'contents',
+        backgroundColor: 'var(--rdg-header-background-color)',
+        fontWeight: 'bold',
+        '& > .rdg-cell': {
+          position: 'sticky',
+          zIndex: 2,
+        },
+        '& > .rdg-cell-frozen': {
+          zIndex: 3,
+        },
+      },
+
+      '& .rdg-summary-row': {
+        display: 'contents',
+        '& > .rdg-cell': {
+          position: 'sticky',
+          zIndex: 2,
+        },
+        '& > .rdg-cell-frozen': {
+          zIndex: 3,
+        },
+      },
+
+      '& .rdg-top-summary-row:last-of-type > .rdg-cell': {
+        borderBlockEnd: 'var(--rdg-summary-border-width) solid var(--rdg-summary-border-color)',
+      },
+
+      '& .rdg-bottom-summary-row:first-of-type > .rdg-cell': {
+        borderBlockStart: 'var(--rdg-summary-border-width) solid var(--rdg-summary-border-color)',
+      },
+
+      '& .rdg-focus-sink': {
+        gridColumn: '1 / -1',
+        pointerEvents: 'none',
+        zIndex: 1,
+        outline: '2px solid var(--rdg-selection-color)',
+        outlineOffset: '-2px',
+      },
+
+      '& .rdg-text-editor': {
+        appearance: 'none',
+        boxSizing: 'border-box',
+        inlineSize: '100%',
+        blockSize: '100%',
+        paddingBlock: 0,
+        paddingInline: 6,
+        border: `2px solid ${theme.colors.border.medium}`,
+        verticalAlign: 'top',
+        color: 'var(--rdg-color)',
+        backgroundColor: 'var(--rdg-background-color)',
+        fontFamily: 'inherit',
+        fontSize: 'var(--rdg-font-size)',
+        '&:focus': {
+          borderColor: 'var(--rdg-selection-color)',
+          outline: 'none',
+        },
+      },
 
       '.rdg-cell': {
         padding: TABLE.CELL_PADDING,
