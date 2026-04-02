@@ -429,7 +429,7 @@ function processGroupItem(
             }
             currentLevel += 1;
           } else {
-            console.warn('Vertical elements after horizontal groups not fully supported');
+            // Ignore unsupported nested vertical containers here instead of logging to the browser console.
           }
         });
         return totalColumns;

@@ -10,12 +10,6 @@ export function PaginationEditor({ onChange, value, id }: StandardEditorProps<bo
 
   const changeValue = (event: React.FormEvent<HTMLInputElement> | React.ChangeEvent<HTMLInputElement> | undefined) => {
     const nextValue = Boolean(event?.currentTarget?.checked);
-    // Temporary debug for diagnosing why the panel option does or does not persist.
-    console.debug('[PaginationEditor] toggle', {
-      id,
-      previousValue: Boolean(value),
-      nextValue,
-    });
     onChange(nextValue);
   };
 

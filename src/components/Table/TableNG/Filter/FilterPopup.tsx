@@ -2,12 +2,19 @@ import { css } from '@emotion/css';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 
 import { Field, GrafanaTheme2, SelectableValue } from '@grafana/data';
-import { useStyles2, useTheme2, Button, ClickOutsideWrapper, FilterInput, Label, Stack, Select } from '@grafana/ui';
+import { useStyles2, useTheme2, Button, FilterInput, Label, Stack, Select } from '@grafana/ui';
 import { FilterType } from '../types';
 import { getDisplayName } from '../utils';
 
 import { FilterList } from './FilterList';
-import { calculateUniqueFieldValuesCached, getFilteredOptions, valuesToOptions } from './utils';
+import {
+  calculateUniqueFieldValuesCached,
+  getFilterValueLabel,
+  getFilteredOptions,
+  getMatchingFilterOptions,
+  normalizeConditionalFilterInput,
+  valuesToOptions,
+} from './utils';
 
 export const operatorSelectableValues: { [key: string]: SelectableValue<string> } = {
   Contains: { label: 'Contains', value: 'Contains', description: 'Contains' },
@@ -57,18 +64,29 @@ export const FilterPopup = ({
   const [values, setValues] = useState<SelectableValue[]>(filteredOptions);
   const [matchCase, setMatchCase] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const normalizedSearchFilter = useMemo(
+    () => (operator.value && operator.value !== 'Contains' ? normalizeConditionalFilterInput(searchFilter) : searchFilter),
+    [operator.value, searchFilter]
+  );
+  const matchingOptions = useMemo(
+    () => getMatchingFilterOptions(options, searchFilter, operator.value, matchCase),
+    [options, searchFilter, operator.value, matchCase]
+  );
 
   const onCancel = useCallback((event?: React.MouseEvent) => onClose(), [onClose]);
 
   const onFilter = useCallback(
     (event: React.MouseEvent) => {
-      if (values.length !== 0) {
-        // create a Set for faster filtering
-        const filteredSet = new Set(values.map((item) => item.value));
+      const conditionOperator = operator.value && operator.value !== 'Contains';
+      const effectiveValues = conditionOperator ? matchingOptions : values;
+
+      if (effectiveValues.length !== 0) {
+        // Store normalized display labels so all table variants compare against the same filter value representation.
+        const filteredSet = new Set(effectiveValues.map((item) => getFilterValueLabel(field, item.value)));
 
         setFilter((filter: FilterType) => ({
           ...filter,
-          [name]: { filtered: values, filteredSet, searchFilter, operator },
+          [name]: { filtered: effectiveValues, filteredSet, searchFilter: normalizedSearchFilter, operator },
         }));
       } else {
         setFilter((filter: FilterType) => {
@@ -79,7 +97,7 @@ export const FilterPopup = ({
       }
       onClose();
     },
-    [name, searchFilter, operator, setFilter, values, onClose]
+    [field, matchingOptions, name, normalizedSearchFilter, onClose, operator, setFilter, values]
   );
 
   const onClearFilter = useCallback(
@@ -97,71 +115,78 @@ export const FilterPopup = ({
   const filterInputPlaceholder = 'Filter values';
   const clearFilterVisible = useMemo(() => filterValue !== undefined, [filterValue]);
   const styles = useStyles2(getStyles);
+  const handleOperatorChange = useCallback(
+    (item?: SelectableValue<string>) => {
+      if (item) {
+        setOperator(item);
+      }
+    },
+    [setOperator]
+  );
 
   return (
-    <ClickOutsideWrapper onClick={onCancel} useCapture={true}>
-      {/* This is just blocking click events from bubbeling and should not have a keyboard interaction. */}
-      <div
-        className={styles.filterContainer}
-        onClick={stopPropagation}
-        ref={containerRef}
-      >
-        <Stack direction="column">
-          <Stack alignItems="center">{field && <Label className={styles.label}>{getDisplayName(field)}</Label>}</Stack>
+    <div
+      className={styles.filterContainer}
+      onClick={stopPropagation}
+      onMouseDown={stopPropagation}
+      ref={containerRef}
+    >
+      <Stack direction="column">
+        <Stack alignItems="center">{field && <Label className={styles.label}>{getDisplayName(field)}</Label>}</Stack>
 
-          <Stack gap={1}>
-            <div className={styles.inputContainer}>
-              <FilterInput
-                placeholder={filterInputPlaceholder}
-                title={filterInputPlaceholder}
-                onChange={setSearchFilter}
-                value={searchFilter}
-              />
-            </div>
-            <div className={styles.selectContainer}>
-              <Select
-                options={OPERATORS}
-                onChange={setOperator}
-                value={operator}
-                width={20}
-              />
-            </div>
-            <Button
-              tooltip={'Match case'}
-              variant="secondary"
-              style={{ color: matchCase ? theme.colors.text.link : theme.colors.text.disabled }}
-              onClick={() => {
-                setMatchCase((s) => !s);
-              }}
-              icon={'text-fields'}
+        <Stack gap={1}>
+          <div className={styles.inputContainer}>
+            <FilterInput
+              placeholder={filterInputPlaceholder}
+              title={filterInputPlaceholder}
+              onChange={setSearchFilter}
+              value={searchFilter}
             />
-          </Stack>
-
-          <FilterList
-            onChange={setValues}
-            values={values}
-            options={options}
-            caseSensitive={matchCase}
-            searchFilter={searchFilter}
-            operator={operator}
+          </div>
+          <div className={styles.selectContainer}>
+            <Select
+              options={OPERATORS}
+              onChange={handleOperatorChange}
+              value={operator}
+              width={20}
+              menuShouldPortal={false}
+            />
+          </div>
+          <Button
+            tooltip={'Match case'}
+            variant="secondary"
+            style={{ color: matchCase ? theme.colors.text.link : theme.colors.text.disabled }}
+            onClick={() => {
+              setMatchCase((s) => !s);
+            }}
+            icon={'text-fields'}
           />
-
-          <Stack justifyContent="end" direction="row-reverse">
-            <Button size="sm" onClick={onFilter}>
-              Ok
-            </Button>
-            <Button size="sm" variant="secondary" onClick={onCancel}>
-              Cancel
-            </Button>
-            {clearFilterVisible && (
-              <Button fill="text" size="sm" onClick={onClearFilter}>
-                Clear filter
-              </Button>
-            )}
-          </Stack>
         </Stack>
-      </div>
-    </ClickOutsideWrapper>
+
+        <FilterList
+          onChange={setValues}
+          values={values}
+          options={options}
+          caseSensitive={matchCase}
+          searchFilter={searchFilter}
+          operator={operator}
+        />
+
+        <Stack justifyContent="end" direction="row-reverse">
+          <Button size="sm" onClick={onFilter}>
+            Ok
+          </Button>
+          <Button size="sm" variant="secondary" onClick={onCancel}>
+            Cancel
+          </Button>
+          {clearFilterVisible && (
+            <Button fill="text" size="sm" onClick={onClearFilter}>
+              Clear filter
+            </Button>
+          )}
+        </Stack>
+      </Stack>
+    </div>
   );
 };
 
@@ -187,7 +212,6 @@ const getStyles = (theme: GrafanaTheme2) => ({
     width: 120,
   }),
 });
-
 const stopPropagation = (event: React.MouseEvent) => {
   event.stopPropagation();
 };

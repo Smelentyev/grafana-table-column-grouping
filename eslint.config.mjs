@@ -31,6 +31,7 @@ export default defineConfig([
       'blob-report/',
       'playwright/.cache/',
       'playwright/.auth/',
+      '.tmp-validator/',
       '**/.idea',
       '**/.eslintcache',
     ],

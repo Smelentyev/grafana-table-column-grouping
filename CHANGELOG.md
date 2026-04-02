@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.0.8 (2026-04-02)
+
+### Fixed
+- Replaced `Expression` filter execution based on arbitrary JavaScript with a safe restricted expression evaluator
+- Fixed `Expression` operator selection and application flow in recent Grafana versions
+- Normalized filter value handling so expression and comparison filters work reliably with raw values and display values
+- Removed leftover production `console.warn(...)` from grouped header pipeline
+- Replaced global react-data-grid style injection with direct stylesheet import
+- Updated end-to-end tests and catalog screenshot generation to match the current provisioned dashboard
+- Updated CI and release workflows for current Grafana plugin packaging and validation flow
+
+### Validation
+- `npm run typecheck`
+- `npm run lint`
+- `npx jest --runInBand --passWithNoTests`
+- `npx playwright test`
+- `grafana/plugin-validator-cli`
+
 ## 1.0.7 (2026-03-26)
 
 ### Changed

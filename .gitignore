@@ -47,3 +47,6 @@ ci/
 
 # Local AI workspace
 .claude/
+
+# Local private notes
+.local-dev/

@@ -2,10 +2,11 @@ import React, { useCallback, useMemo } from 'react';
 import { css } from '@emotion/css';
 import { FixedSizeList as List } from 'react-window';
 
-import { GrafanaTheme2, formattedValueToString, getValueFormat, SelectableValue } from '@grafana/data';
+import { GrafanaTheme2, SelectableValue } from '@grafana/data';
 import { useStyles2, useTheme2, Checkbox, Label, Stack } from '@grafana/ui';
 
 import { operatorSelectableValues } from './FilterPopup';
+import { getMatchingFilterOptions } from './utils';
 
 interface Props {
   values: SelectableValue[];
@@ -20,80 +21,11 @@ const ITEM_HEIGHT = 28;
 const MIN_HEIGHT = ITEM_HEIGHT * 4.5; // split an item in the middle to imply there are more items to scroll
 
 export const REGEX_OPERATOR = operatorSelectableValues['Contains'];
-const XPR_OPERATOR = operatorSelectableValues['Expression'];
-
-const comparableValue = (value: string): string | number | Date | boolean => {
-  value = value.trim().replace(/\\/g, '');
-
-  // Does it look like a Date (Starting with pattern YYYY-MM-DD* or YYYY/MM/DD*)?
-  if (/^(\d{4}-\d{2}-\d{2}|\d{4}\/\d{2}\/\d{2})/.test(value)) {
-    const date = new Date(value);
-    if (!isNaN(date.getTime())) {
-      const fmt = getValueFormat('dateTimeAsIso');
-      return formattedValueToString(fmt(date.getTime()));
-    }
-  }
-  // Does it look like a Number?
-  const num = parseFloat(value);
-  if (!isNaN(num)) {
-    return num;
-  }
-  // Does it look like a Bool?
-  const lvalue = value.toLowerCase();
-  if (lvalue === 'true' || lvalue === 'false') {
-    return lvalue === 'true';
-  }
-  // Anything else
-  return value;
-};
 
 export const FilterList = ({ options, values, caseSensitive, onChange, searchFilter, operator }: Props) => {
-  const regex = useMemo(() => new RegExp(searchFilter, caseSensitive ? undefined : 'i'), [searchFilter, caseSensitive]);
   const items = useMemo(
-    () =>
-      options.filter((option) => {
-        if (!searchFilter || operator.value === REGEX_OPERATOR.value) {
-          if (option.label === undefined) {
-            return false;
-          }
-          return regex.test(option.label);
-        } else if (operator.value === XPR_OPERATOR.value) {
-          if (option.value === undefined) {
-            return false;
-          }
-          try {
-            const xpr = searchFilter.replace(/\\/g, '');
-            const fnc = new Function('$', `'use strict'; return ${xpr};`);
-            const val = comparableValue(option.value);
-            return fnc(val);
-          } catch (_) {}
-          return false;
-        } else {
-          if (option.value === undefined) {
-            return false;
-          }
-
-          const value1 = comparableValue(option.value);
-          const value2 = comparableValue(searchFilter);
-
-          switch (operator.value) {
-            case '=':
-              return value1 === value2;
-            case '!=':
-              return value1 !== value2;
-            case '>':
-              return value1 > value2;
-            case '>=':
-              return value1 >= value2;
-            case '<':
-              return value1 < value2;
-            case '<=':
-              return value1 <= value2;
-          }
-          return false;
-        }
-      }),
-    [options, regex, operator, searchFilter]
+    () => getMatchingFilterOptions(options, searchFilter, operator.value, caseSensitive),
+    [options, caseSensitive, operator.value, searchFilter]
   );
   const selectedItems = useMemo(() => items.filter((item) => values.includes(item)), [items, values]);
 

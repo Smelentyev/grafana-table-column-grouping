@@ -113,6 +113,27 @@ For Grafana catalog submission, keep these assets current:
 - `CHANGELOG.md` (release notes)
 - `src/plugin.json` metadata (description, links, screenshots)
 
+## Reviewer testing guidance
+
+The repository includes a provisioned Grafana test environment and a sample dashboard used for validation and review.
+
+Manual validation flow:
+
+1. Start Grafana locally with `npm run server`.
+2. Open the provisioned dashboard `Provisioned Grafana_Advanced_Table dashboard`.
+3. Check panel `Grouped Columns Demo` for grouped headers and pagination behavior.
+4. Check panel `Sample Panel Title` for the no-data state.
+5. Check panel `Expression Filter Repro` for filter behavior.
+6. In the `Session` column filter, select `Expression` and test an expression such as `$<=228556801`.
+7. Confirm only matching rows remain visible and invalid expressions fail safely without executing arbitrary code.
+
+Automated validation available in the repository:
+
+- Unit tests: `npm run test:ci`
+- E2E tests: `npm run e2e`
+- Static checks: `npm run typecheck` and `npm run lint`
+- Build: `npm run build`
+
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).

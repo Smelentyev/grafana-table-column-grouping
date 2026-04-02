@@ -16,13 +16,14 @@ test.describe.serial('Table with Column Grouping', () => {
     readProvisionedDashboard,
   }) => {
     const dashboard = await readProvisionedDashboard({ fileName: 'dashboard.json' });
-    const panelEditPage = await gotoPanelEditPage({ dashboard, id: '1' });
+    const panelEditPage = await gotoPanelEditPage({ dashboard, id: '3' });
 
-    await expect(panelEditPage.panel.locator.getByRole('columnheader', { name: 'Time' })).toBeVisible();
-    await expect(panelEditPage.panel.locator.getByRole('columnheader', { name: 'Label' })).toBeVisible();
-    await expect(panelEditPage.panel.locator.getByRole('columnheader', { name: 'Value' })).toBeVisible();
-    await expect(panelEditPage.panel.locator.getByRole('gridcell', { name: 'A' })).toBeVisible();
-    await expect(panelEditPage.panel.locator.getByRole('gridcell', { name: '10' })).toBeVisible();
+    await expect(panelEditPage.panel.locator.getByRole('columnheader', { name: 'Severity' })).toBeVisible();
+    await expect(panelEditPage.panel.locator.getByRole('columnheader', { name: 'DateTime' })).toBeVisible();
+    await expect(panelEditPage.panel.locator.getByRole('columnheader', { name: 'User' })).toBeVisible();
+    await expect(panelEditPage.panel.locator.getByRole('columnheader', { name: 'TransactionStatus' })).toBeVisible();
+    await expect(panelEditPage.panel.locator.getByRole('cell', { name: 'Информация' }).first()).toBeVisible();
+    await expect(panelEditPage.panel.locator.getByRole('cell', { name: 'Кукушкина ВМ' }).first()).toBeVisible();
   });
 
   test('should hide header row when "Show table header" is disabled', async ({

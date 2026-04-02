@@ -59,17 +59,19 @@ export const Filter = ({
   const [operator, setOperator] = useState<SelectableValue<string>>(filter[name]?.operator || REGEX_OPERATOR);
 
   return (
-    <button
-      className={cx(styles.headerFilter, buttonClassName)}
-      ref={setButtonElement}
-      type="button"
-      data-testid="table-filter-header-button"
-      onClick={(ev) => {
-        setPopoverVisible(true);
-        ev.stopPropagation();
-      }}
-    >
-      <Icon name="filter" className={cx(iconClassName, { [styles.filterIconEnabled]: filterEnabled })} />
+    <>
+      <button
+        className={cx(styles.headerFilter, buttonClassName)}
+        ref={setButtonElement}
+        type="button"
+        data-testid="table-filter-header-button"
+        onClick={(ev) => {
+          setPopoverVisible(true);
+          ev.stopPropagation();
+        }}
+      >
+        <Icon name="filter" className={cx(iconClassName, { [styles.filterIconEnabled]: filterEnabled })} />
+      </button>
       {isPopoverVisible && buttonElement && (
         <Popover
           content={
@@ -96,7 +98,7 @@ export const Filter = ({
           show
         />
       )}
-    </button>
+    </>
   );
 };
 

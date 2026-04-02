@@ -35,6 +35,23 @@
       },
       "id": 1,
       "description": "Горячие клавиши: Стрелки - навигация по ячейкам; Shift+Вверх / Shift+Вниз - переход к предыдущей или следующей логической записи; Ctrl+Влево / Ctrl+Вправо - предыдущая или следующая страница; Enter - просмотр значения; F - фильтр по значению; Shift+F - исключить значение.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Session"
+            },
+            "properties": [
+              {
+                "id": "custom.filterable",
+                "value": true
+              }
+            ]
+          }
+        ]
+      },
       "options": {
         "cellHeight": "sm",
         "columnGrouping": {
@@ -401,6 +418,63 @@
         }
       ],
       "title": "Bug Repro - Uneven Root Group Depth (1000 rows)",
+      "type": "smelentyev-tablecolumngrouping-panel"
+    },
+    {
+      "datasource": {
+        "type": "grafana-testdata-datasource",
+        "uid": "trlxrdZVk"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "id": 5,
+      "description": "Expression filter repro on a plain table with Session filter enabled.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Session"
+            },
+            "properties": [
+              {
+                "id": "custom.filterable",
+                "value": true
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "cellHeight": "sm",
+        "columnGrouping": {
+          "enabled": false,
+          "ungroupedColumns": [],
+          "rootGroups": []
+        },
+        "enablePagination": false,
+        "frameIndex": 0,
+        "showHeader": true,
+        "showTypeIcons": false,
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "trlxrdZVk"
+          },
+          "refId": "A",
+          "scenarioId": "raw_frame",
+          "rawFrameContent": "[\r\n  {\r\n    \"columns\": [\r\n      {\r\n        \"type\": \"string\",\r\n        \"text\": \"Label\"\r\n      },\r\n      {\r\n        \"type\": \"number\",\r\n        \"text\": \"Session\"\r\n      }\r\n    ],\r\n    \"rows\": [\r\n      [\"row-1\", 228556801],\r\n      [\"row-2\", 228556802],\r\n      [\"row-3\", 228556803],\r\n      [\"row-4\", 0]\r\n    ]\r\n  }\r\n]"
+        }
+      ],
+      "title": "Expression Filter Repro",
       "type": "smelentyev-tablecolumngrouping-panel"
     }
   ],

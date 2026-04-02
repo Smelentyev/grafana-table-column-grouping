@@ -18,6 +18,7 @@ import { TableCellInspector } from '../TableCellInspector';
 import { TableCellActions } from './components/TableCellActions';
 import { SummaryCell } from './components/SummaryCell';
 import { Filter } from './Filter/Filter';
+import { getFilterValueLabel } from './Filter/utils';
 import { getCellRenderer } from './Cells/renderers';
 import { COLUMN, TABLE } from './constants';
 import {
@@ -463,7 +464,7 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
       const field = fieldByName.get(fieldName);
       if (filterValue?.filteredSet?.size && field) {
         prefixIndices = prefixIndices.filter((i) =>
-          filterValue.filteredSet.has(String(field.values[i] ?? ''))
+          filterValue.filteredSet.has(getFilterValueLabel(field, field.values[i]))
         );
       }
       result[fieldName] = prefixIndices;
@@ -741,6 +742,7 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
 
   // ── Display value cache ──────────────────────────────────────────────────────
   /** Cleared whenever visible data changes; filled lazily during body render. */
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const displayValueCache = useMemo(() => new Map<string, string>(), [visibleData]);
 
   // ── Cell plan ────────────────────────────────────────────────────────────────
@@ -828,7 +830,7 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
         colIndex: nextColIndex,
       });
     },
-    [activeCell, numPages, page, paginationEnabled, rowsPerPage]
+    [activeCell, numPages, page, paginationEnabled, rowsPerPage, setPage]
   );
 
   React.useEffect(() => {

@@ -14,15 +14,15 @@ test.describe.serial('Catalog screenshots', () => {
 
     await page.setViewportSize({ width: 1600, height: 1000 });
 
-    const panel1 = await gotoPanelEditPage({ dashboard, id: '1' });
-    await expect(panel1.panel.locator.getByRole('columnheader', { name: 'Sales' })).toBeVisible();
-    await expect(panel1.panel.locator.getByRole('columnheader', { name: 'Plan' })).toBeVisible();
-    await expect(panel1.panel.locator.getByRole('columnheader', { name: 'Profit' })).toBeVisible();
-    await panel1.panel.locator.screenshot({
+    const groupedPanel = await gotoPanelEditPage({ dashboard, id: '3' });
+    await expect(groupedPanel.panel.locator.getByRole('columnheader', { name: 'Severity' })).toBeVisible();
+    await expect(groupedPanel.panel.locator.getByRole('columnheader', { name: 'User' })).toBeVisible();
+    await expect(groupedPanel.panel.locator.getByRole('columnheader', { name: 'TransactionStatus' })).toBeVisible();
+    await groupedPanel.panel.locator.screenshot({
       path: path.join(outputDir, 'table-main.png'),
     });
 
-    const tableOptions = panel1.getCustomOptions('Table');
+    const tableOptions = groupedPanel.getCustomOptions('Table');
     await tableOptions.expand();
     await page.screenshot({
       path: path.join(outputDir, 'table-edit-options.png'),

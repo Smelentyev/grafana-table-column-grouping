@@ -1,5 +1,6 @@
 import { DataFrame, Field } from '@grafana/data';
 
+import { getFilterValueLabel } from './Filter/utils';
 import { FilterType } from './types';
 
 /** Inline copy to avoid importing the heavy utils.ts in tests */
@@ -30,7 +31,7 @@ export function filterIndices(data: DataFrame, filter: FilterType): number[] {
       if (!field) {
         continue;
       }
-      const value = String(field.values[i] ?? '');
+      const value = getFilterValueLabel(field, field.values[i]);
       if (filterValue.filteredSet.size > 0 && !filterValue.filteredSet.has(value)) {
         match = false;
         break;

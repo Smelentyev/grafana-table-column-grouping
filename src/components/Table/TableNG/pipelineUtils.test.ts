@@ -54,9 +54,9 @@ describe('filterIndices', () => {
     expect(filterIndices(frame, filter)).toEqual([]);
   });
 
-  test('treats null/undefined values as empty string', () => {
+  test('treats null/undefined values as (Blanks)', () => {
     const f = makeFrame(makeField('val', [null, undefined, 'x']));
-    const filter: FilterType = { val: { filteredSet: new Set(['']) } };
+    const filter: FilterType = { val: { filteredSet: new Set(['(Blanks)']) } };
     expect(filterIndices(f, filter)).toEqual([0, 1]);
   });
 

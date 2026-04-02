@@ -4,6 +4,7 @@ import { Column, DataGridHandle, DataGridProps, SortColumn } from 'react-data-gr
 import { compareArrayValues, Field, FieldType, formattedValueToString, reduceField, ReducerID } from '@grafana/data';
 
 import { TableColumnResizeActionCallback } from '../types';
+import { getFilterValueLabel } from './Filter/utils';
 
 import { TABLE } from './constants';
 import { FilterType, FooterFieldState, TableRow, TableSortByFieldState, TableSummaryRow, TypographyCtx } from './types';
@@ -19,14 +20,9 @@ import {
   IS_SAFARI_26,
 } from './utils';
 
-// Helper function to get displayed value
 const getDisplayedValue = (row: TableRow, key: string, fields: Field[]) => {
   const field = fields.find((field) => getDisplayName(field) === key);
-  if (!field || !field.display) {
-    return '';
-  }
-  const displayedValue = formattedValueToString(field.display(row[key]));
-  return displayedValue;
+  return getFilterValueLabel(field, row[key]);
 };
 
 export interface FilteredRowsResult {
