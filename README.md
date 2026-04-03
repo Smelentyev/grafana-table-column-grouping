@@ -54,6 +54,20 @@ systemctl restart grafana-server
 5. Build header hierarchy in the grouping editor.
 6. Fine-tune field display options and widths.
 
+## Screenshots
+
+### Grouped table view
+
+![Grouped table view](src/img/screenshots/table-main.png)
+
+### Panel editor
+
+![Panel editor with grouping options](src/img/screenshots/table-edit-options.png)
+
+### No-data state
+
+![No-data state](src/img/screenshots/table-no-data.png)
+
 ## Feature highlights
 
 - Nested group headers with flexible depth

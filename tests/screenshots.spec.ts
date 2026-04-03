@@ -18,6 +18,7 @@ test.describe.serial('Catalog screenshots', () => {
     await expect(groupedPanel.panel.locator.getByRole('columnheader', { name: 'Severity' })).toBeVisible();
     await expect(groupedPanel.panel.locator.getByRole('columnheader', { name: 'User' })).toBeVisible();
     await expect(groupedPanel.panel.locator.getByRole('columnheader', { name: 'TransactionStatus' })).toBeVisible();
+    await expect(groupedPanel.panel.locator.getByRole('cell', { name: 'Test User A' }).first()).toBeVisible();
     await groupedPanel.panel.locator.screenshot({
       path: path.join(outputDir, 'table-main.png'),
     });

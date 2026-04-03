@@ -22,8 +22,8 @@ test.describe.serial('Table with Column Grouping', () => {
     await expect(panelEditPage.panel.locator.getByRole('columnheader', { name: 'DateTime' })).toBeVisible();
     await expect(panelEditPage.panel.locator.getByRole('columnheader', { name: 'User' })).toBeVisible();
     await expect(panelEditPage.panel.locator.getByRole('columnheader', { name: 'TransactionStatus' })).toBeVisible();
-    await expect(panelEditPage.panel.locator.getByRole('cell', { name: 'Информация' }).first()).toBeVisible();
-    await expect(panelEditPage.panel.locator.getByRole('cell', { name: 'Кукушкина ВМ' }).first()).toBeVisible();
+    await expect(panelEditPage.panel.locator.getByRole('cell', { name: 'Info' }).first()).toBeVisible();
+    await expect(panelEditPage.panel.locator.getByRole('cell', { name: 'Test User A' }).first()).toBeVisible();
   });
 
   test('should hide header row when "Show table header" is disabled', async ({
