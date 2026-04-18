@@ -1,6 +1,6 @@
 {
   "name": "table-column-grouping",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "scripts": {
     "build": "webpack -c ./webpack.config.ts --env production",
     "dev": "webpack -w -c ./webpack.config.ts --env development",

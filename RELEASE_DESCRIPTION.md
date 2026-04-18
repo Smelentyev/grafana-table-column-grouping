@@ -11,7 +11,12 @@ The Business Table panel plugin transforms your data into an advanced table with
 
 ## 🎯 What's New
 
-This is the initial release of the Business Table plugin with full column grouping support.
+This release updates the plugin metadata and table internals to match current Grafana compatibility requirements.
+
+- Updated the minimum supported Grafana version to `12.2.0`
+- Replaced dynamic row mapping logic with a CSP-safe implementation that works in Grafana Cloud and hardened deployments
+- Improved sparkline value measurement so it follows the active Grafana theme typography
+- Reduced noisy error logging for invalid cell style JSON values
 
 ## 📦 Installation
 
@@ -43,7 +48,7 @@ grafana-cli plugins install smelentyev-tablecolumngrouping-panel
 
 ## ⚙️ Requirements
 
-- Grafana >= 11.6.0
+- Grafana >= 12.2.0
 
 ## 🚀 Getting Started
 

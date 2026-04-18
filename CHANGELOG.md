@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.0.10 (2026-04-18)
+
+### Fixed
+- Updated the minimum supported Grafana version to `>= 12.2.0` to match the plugin's actual runtime requirements
+- Replaced CSP-blocked dynamic row mapping in the table pipeline with a standard loop-based implementation
+- Switched sparkline value measurement to use the active Grafana theme typography instead of a hardcoded font size
+- Removed raw invalid cell style values from error logging
+- Fixed Windows execution issues in the local plugin validator scripts
+
+### Validation
+- `npm run typecheck`
+- `npx eslint --no-cache .`
+- `npm run build`
+- `npx jest --runInBand`
+- `npm run e2e`
+- `./script/run-plugin-validator.ps1 -NoPull`
+
 ## 1.0.9 (2026-04-02)
 
 ### Fixed

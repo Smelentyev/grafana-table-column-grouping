@@ -1,6 +1,6 @@
 # Table with Column Grouping
 
-![Grafana](https://img.shields.io/badge/Grafana-11.6%2B-orange)
+![Grafana](https://img.shields.io/badge/Grafana-12.2%2B-orange)
 ![License](https://img.shields.io/github/license/Smelentyev/grafana-table-column-grouping)
 
 `Table with Column Grouping` extends the standard Grafana table panel with configurable multi-level headers and column group layouts.
@@ -17,7 +17,7 @@ Use it when you need:
 
 ## Requirements
 
-- Grafana `>= 11.6.0`
+- Grafana `>= 12.2.0`
 
 ## Installation
 

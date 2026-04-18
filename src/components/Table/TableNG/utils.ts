@@ -57,7 +57,6 @@ import { COLUMN, TABLE } from './constants';
 import {
   TableRow,
   ColumnTypes,
-  FrameToRowsConverter,
   Comparator,
   TypographyCtx,
   MeasureCellHeight,
@@ -694,35 +693,38 @@ export function applySort(
  * @internal
  */
 export const frameToRecords = (frame: DataFrame, nestedFramesFieldName?: string): TableRow[] => {
-  const fnBody = `
-    const rows = Array(frame.length);
-    const values = frame.fields.map(f => f.values);
-    const hasNestedFrames = '${nestedFramesFieldName ?? ''}'.length > 0;
+  const rows: TableRow[] = [];
+  const fieldEntries = frame.fields.map((field) => ({
+    name: getDisplayName(field),
+    values: field.values,
+  }));
+  const hasNestedFrames = Boolean(nestedFramesFieldName);
 
-    let rowCount = 0;
-    for (let i = 0; i < frame.length; i++) {
-      rows[rowCount] = {
-        __depth: 0,
-        __index: i,
-        ${frame.fields.map((field, fieldIdx) => `${JSON.stringify(getDisplayName(field))}: values[${fieldIdx}][i]`).join(',')}
-      };
-      rowCount++;
+  for (let rowIndex = 0; rowIndex < frame.length; rowIndex++) {
+    const row: TableRow = {
+      __depth: 0,
+      __index: rowIndex,
+    };
 
-      if (hasNestedFrames) {
-        const childFrame = rows[rowCount-1][${JSON.stringify(nestedFramesFieldName)}];
-        if (childFrame){
-          rows[rowCount] = {__depth: 1, __index: i, data: childFrame[0]}
-          rowCount++;
-        }
+    for (const fieldEntry of fieldEntries) {
+      row[fieldEntry.name] = fieldEntry.values[rowIndex];
+    }
+
+    rows.push(row);
+
+    if (hasNestedFrames) {
+      const childFrames = row[nestedFramesFieldName!];
+      if (Array.isArray(childFrames) && childFrames[0] != null) {
+        rows.push({
+          __depth: 1,
+          __index: rowIndex,
+          data: childFrames[0],
+        });
       }
     }
-    return rows;
-  `;
+  }
 
-  // Creates a function that converts a DataFrame into an array of TableRows
-  // Uses new Function() for performance as it's faster than creating rows using loops
-  const convert = new Function('frame', 'nestedFramesFieldName', fnBody) as FrameToRowsConverter;
-  return convert(frame, nestedFramesFieldName);
+  return rows;
 };
 
 /* ----------------------------- Data grid comparator ---------------------------- */
@@ -1119,7 +1121,7 @@ export function parseStyleJson(rawValue: unknown): CSSProperties | void {
       }
     } catch (e) {
       if (!warnedAboutStyleJsonSet.has(rawValue)) {
-        console.error(`encountered invalid cell style JSON: ${rawValue}`, e);
+        console.error('encountered invalid cell style JSON', e);
         warnedAboutStyleJsonSet.add(rawValue);
       }
     }

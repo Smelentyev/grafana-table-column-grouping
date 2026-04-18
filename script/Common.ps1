@@ -52,7 +52,7 @@ function Invoke-WebpackBuild {
   Push-Location $RepoRoot
   try {
     if ([string]::IsNullOrWhiteSpace($OutputPath)) {
-      & npm run build
+      & npm run build | Out-Host
       if ($LASTEXITCODE -ne 0) {
         throw "Build failed with exit code $LASTEXITCODE."
       }
@@ -60,7 +60,7 @@ function Invoke-WebpackBuild {
       return (Join-Path $RepoRoot 'dist')
     }
 
-    & npm run build -- --env production --env "outputPath=$OutputPath" --env disableCache=true
+    & npm run build -- --env production --env "outputPath=$OutputPath" --env disableCache=true | Out-Host
     if ($LASTEXITCODE -ne 0) {
       throw "Build failed with exit code $LASTEXITCODE."
     }
@@ -93,4 +93,3 @@ function New-PluginArchive {
 
   return $archivePath
 }
-

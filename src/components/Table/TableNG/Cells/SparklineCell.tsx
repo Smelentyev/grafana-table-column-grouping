@@ -1,7 +1,14 @@
 import React from 'react';
 import { css } from '@emotion/css';
 
-import { FieldConfig, getMinMaxAndDelta, Field, isDataFrameWithValue, formattedValueToString } from '@grafana/data';
+import {
+  FieldConfig,
+  getMinMaxAndDelta,
+  Field,
+  isDataFrameWithValue,
+  formattedValueToString,
+  GrafanaTheme2,
+} from '@grafana/data';
 import {
   BarAlignment,
   GraphDrawStyle,
@@ -15,11 +22,12 @@ import {
 import { Sparkline } from '@grafana/ui';
 
 // Simple measureText utility
-const measureText = (text: string, fontSize: number): { width: number; height: number } => {
+const measureText = (text: string, theme: GrafanaTheme2): { width: number; height: number } => {
+  const fontSize = Number.parseInt(String(theme.typography.body.fontSize), 10) || 16;
   const canvas = document.createElement('canvas');
   const context = canvas.getContext('2d');
   if (context) {
-    context.font = `${fontSize}px sans-serif`;
+    context.font = `${fontSize}px ${theme.typography.fontFamily}`;
     const metrics = context.measureText(text);
     return { width: metrics.width, height: fontSize };
   }
@@ -93,7 +101,7 @@ export const SparklineCell = (props: SparklineCellProps) => {
     const alignmentFactor = getAlignmentFactor(field, displayValue, rowIdx!);
 
     valueWidth =
-      measureText(`${alignmentFactor.prefix ?? ''}${alignmentFactor.text}${alignmentFactor.suffix ?? ''}`, 16).width +
+      measureText(`${alignmentFactor.prefix ?? ''}${alignmentFactor.text}${alignmentFactor.suffix ?? ''}`, theme).width +
       theme.spacing.gridSize;
 
     const formattedValue = formattedValueToString(displayValue);
