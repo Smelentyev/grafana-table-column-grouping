@@ -1,6 +1,7 @@
 import { expect, test } from '@grafana/plugin-e2e';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
+import { dismissWhatsNewModal, getPanelWithGridContainer, getPanelWithTextContainer } from './utils';
 
 const outputDir = path.resolve(process.cwd(), 'src/img/screenshots');
 
@@ -15,11 +16,16 @@ test.describe.serial('Catalog screenshots', () => {
     await page.setViewportSize({ width: 1600, height: 1000 });
 
     const groupedPanel = await gotoPanelEditPage({ dashboard, id: '3' });
-    await expect(groupedPanel.panel.locator.getByRole('columnheader', { name: 'Severity' })).toBeVisible();
-    await expect(groupedPanel.panel.locator.getByRole('columnheader', { name: 'User' })).toBeVisible();
-    await expect(groupedPanel.panel.locator.getByRole('columnheader', { name: 'TransactionStatus' })).toBeVisible();
-    await expect(groupedPanel.panel.locator.getByRole('cell', { name: 'Test User A' }).first()).toBeVisible();
-    await groupedPanel.panel.locator.screenshot({
+    await dismissWhatsNewModal(page);
+    await expect(page.getByRole('grid', { name: 'Grouped table' })).toBeVisible({ timeout: 15000 });
+    const groupedPanelRegion = getPanelWithGridContainer(page, 'README Demo - Grouped Audit Events');
+    await expect(page.getByRole('columnheader', { name: 'Severity' })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('columnheader', { name: 'User' })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('columnheader', { name: 'TransactionStatus' })).toBeVisible({
+      timeout: 15000,
+    });
+    await expect(page.getByRole('cell', { name: 'Test User A' }).first()).toBeVisible({ timeout: 15000 });
+    await groupedPanelRegion.screenshot({
       path: path.join(outputDir, 'table-main.png'),
     });
 
@@ -30,9 +36,11 @@ test.describe.serial('Catalog screenshots', () => {
       fullPage: false,
     });
 
-    const panel2 = await gotoPanelEditPage({ dashboard, id: '2' });
-    await expect(panel2.panel.locator).toBeVisible();
-    await panel2.panel.locator.screenshot({
+    await gotoPanelEditPage({ dashboard, id: '2' });
+    await dismissWhatsNewModal(page);
+    const panel2 = getPanelWithTextContainer(page, 'Sample Panel Title', 'No data');
+    await expect(panel2).toBeVisible();
+    await panel2.screenshot({
       path: path.join(outputDir, 'table-no-data.png'),
     });
   });

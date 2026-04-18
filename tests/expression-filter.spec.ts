@@ -1,4 +1,5 @@
 import { expect, test } from '@grafana/plugin-e2e';
+import { dismissWhatsNewModal } from './utils';
 
 test.describe.serial('Expression filter', () => {
   test('filters grouped table numeric values with expression operator', async ({
@@ -7,11 +8,15 @@ test.describe.serial('Expression filter', () => {
     readProvisionedDashboard,
   }) => {
     const dashboard = await readProvisionedDashboard({ fileName: 'dashboard.json' });
-    const panelEditPage = await gotoPanelEditPage({ dashboard, id: '5' });
+    await gotoPanelEditPage({ dashboard, id: '5' });
+    await dismissWhatsNewModal(page);
+    await expect(page.getByRole('heading', { name: 'Expression Filter Repro', exact: true })).toBeVisible({
+      timeout: 15000,
+    });
+    await expect(page.getByRole('grid').first()).toBeVisible({ timeout: 15000 });
 
-    const panel = panelEditPage.panel.locator;
-    const sessionHeader = panel.getByRole('columnheader', { name: /Session/i });
-    await expect(sessionHeader).toBeVisible();
+    const sessionHeader = page.getByRole('columnheader', { name: /Session/i });
+    await expect(sessionHeader).toBeVisible({ timeout: 15000 });
 
     await sessionHeader.getByTestId('table-filter-header-button').click();
 
@@ -24,7 +29,7 @@ test.describe.serial('Expression filter', () => {
     await expect(popup.getByText('Expression', { exact: true })).toBeVisible();
     await popup.getByRole('button', { name: 'Ok' }).click();
 
-    await expect(panel.getByText('228556801', { exact: true })).toBeVisible();
-    await expect(panel.getByText('228556802', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('gridcell', { name: '228556801' })).toBeVisible();
+    await expect(page.getByRole('gridcell', { name: '228556802' })).toHaveCount(0);
   });
 });

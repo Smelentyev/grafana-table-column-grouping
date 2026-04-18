@@ -11,12 +11,12 @@ The Business Table panel plugin transforms your data into an advanced table with
 
 ## 🎯 What's New
 
-This release updates the plugin metadata and table internals to match current Grafana compatibility requirements.
+This release refreshes the package after stabilizing the Grafana 13 test and screenshot flow.
 
-- Updated the minimum supported Grafana version to `12.2.0`
-- Replaced dynamic row mapping logic with a CSP-safe implementation that works in Grafana Cloud and hardened deployments
-- Improved sparkline value measurement so it follows the active Grafana theme typography
-- Reduced noisy error logging for invalid cell style JSON values
+- Stabilized E2E coverage for Grafana 13 by dismissing the onboarding modal before panel interactions
+- Updated table test selectors to match current Grafana accessibility semantics
+- Fixed the expression filter E2E flow against the provisioned demo dashboard
+- Refreshed catalog screenshots from the current dashboard state
 
 ## 📦 Installation
 

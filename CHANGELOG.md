@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.11 (2026-04-18)
+
+### Fixed
+- Stabilized E2E coverage for Grafana 13 by dismissing the onboarding modal before panel interactions
+- Updated E2E table assertions to use resilient role-based selectors that match Grafana 13 accessibility semantics
+- Fixed the expression filter E2E to target the actual panel structure rendered in recent Grafana versions
+- Refreshed catalog screenshots from the current provisioned dashboard state
+
+### Validation
+- `npm run e2e`
+
 ## 1.0.10 (2026-04-18)
 
 ### Fixed
