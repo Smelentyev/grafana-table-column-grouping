@@ -46,9 +46,11 @@ test.describe.serial('Table with Column Grouping', () => {
     await dismissWhatsNewModal(page);
     const options = panelEditPage.getCustomOptions('Table');
     await options.expand();
-    const showHeader = options.getSwitch('Show table header');
-
-    await showHeader.uncheck();
+    const showHeader = page.getByRole('switch', { name: /show table header/i }).first();
+    await expect(showHeader).toBeVisible({ timeout: 15000 });
+    if ((await showHeader.getAttribute('aria-checked')) === 'true') {
+      await showHeader.click();
+    }
     // Table implementation may keep header DOM but hide it when disabled.
     const headers = page.getByRole('columnheader');
     const headerCount = await headers.count();

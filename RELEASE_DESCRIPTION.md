@@ -11,12 +11,11 @@ The Business Table panel plugin transforms your data into an advanced table with
 
 ## 🎯 What's New
 
-This release refreshes the package after stabilizing the Grafana 13 test and screenshot flow.
+This release prepares the catalog package for publication after Grafana granted community signing for the plugin.
 
-- Stabilized E2E coverage for Grafana 13 by dismissing the onboarding modal before panel interactions
-- Updated table test selectors to match current Grafana accessibility semantics
-- Fixed the expression filter E2E flow against the provisioned demo dashboard
-- Refreshed catalog screenshots from the current dashboard state
+- Signed public plugin packaging for Grafana catalog submission
+- Carried forward the latest Grafana 13 E2E stabilization and selector hardening
+- Keeps the refreshed catalog screenshots from the current dashboard state
 
 ## 📦 Installation
 

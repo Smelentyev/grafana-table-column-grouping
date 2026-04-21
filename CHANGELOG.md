@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.12 (2026-04-21)
+
+### Changed
+- Prepared the plugin package for Grafana catalog publication with signed release packaging
+- Carried forward the latest Grafana 13 E2E stabilization updates for the release candidate
+
+### Validation
+- `npm run build`
+- `npm run sign`
+
 ## 1.0.11 (2026-04-18)
 
 ### Fixed
