@@ -11,11 +11,12 @@ The Business Table panel plugin transforms your data into an advanced table with
 
 ## 🎯 What's New
 
-This release prepares the catalog package for publication after Grafana granted community signing for the plugin.
+This release improves grouped-table sizing and column resizing behavior.
 
-- Signed public plugin packaging for Grafana catalog submission
-- Carried forward the latest Grafana 13 E2E stabilization and selector hardening
-- Keeps the refreshed catalog screenshots from the current dashboard state
+- Grouped tables now fill the available panel width using Grafana's standard automatic sizing behavior
+- Leaf-column resize handles update only the selected column
+- Parent-group resize handles resize their leaf columns proportionally
+- Minimum widths are respected and horizontal scrolling remains available when the table is wider than the panel
 
 ## 📦 Installation
 

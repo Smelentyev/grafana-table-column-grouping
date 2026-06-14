@@ -43,6 +43,7 @@ import {
   buildSimpleHeaderStructure,
   normalizeRootGroups,
 } from './groupedTable/groupHeaderPipeline';
+import { resizeColumnRange } from './groupedTable/columnResize';
 import {
   ActiveGroupedCell,
   buildOwnershipMatrix,
@@ -122,7 +123,6 @@ const getStyles = (theme: GrafanaTheme2) => ({
     z-index: 0;
   `,
   table: css`
-    width: 100%;
     border-collapse: separate;
     border-spacing: 0;
     font-size: ${theme.typography.fontSize}px;
@@ -433,16 +433,20 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
 
   // ── Column resize state ──────────────────────────────────────────────────────
   const [columnWidths, setColumnWidths] = useState<Map<number, number>>(new Map());
-  const [resizingColumn, setResizingColumn] = useState<number | null>(null);
+  const [resizingRange, setResizingRange] = useState<{ start: number; count: number } | null>(null);
   const resizeStartXRef = React.useRef<number>(0);
   const resizeStartWidthRef = React.useRef<number>(0);
+  const resizeStartWidthsRef = React.useRef<number[]>([]);
+  const resizeStartTableWidthRef = React.useRef<number>(0);
   const resizingHeaderRef = React.useRef<HTMLElement | null>(null);
-  const pendingWidthRef = React.useRef<number | null>(null);
+  const pendingWidthsRef = React.useRef<number[] | null>(null);
   const columnMinWidthsRef = React.useRef<number[]>([]);
   /** Direct refs to <col> elements; written during drag to avoid React re-renders. */
   const colElemsRef = React.useRef<Array<HTMLTableColElement | null>>([]);
   /** Same for the footer table — kept in sync during drag so footer widths don't lag. */
   const footerColElemsRef = React.useRef<Array<HTMLTableColElement | null>>([]);
+  const tableRef = React.useRef<HTMLTableElement | null>(null);
+  const footerTableRef = React.useRef<HTMLTableElement | null>(null);
   const theadRef = React.useRef<HTMLTableSectionElement | null>(null);
   const firstVisibleRecordRef = React.useRef<HTMLTableSectionElement | null>(null);
   const [headerHeightPx, setHeaderHeightPx] = useState(0);
@@ -501,7 +505,7 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
   }, [onSortByChange]);
 
   // ── Column resize handlers ───────────────────────────────────────────────────
-  const handleResizeStart = (columnIndex: number, event: React.MouseEvent) => {
+  const handleResizeStart = (columnIndex: number, columnCount: number, event: React.MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
     const headerCell = (event.target as HTMLElement).parentElement;
@@ -511,57 +515,93 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
     resizingHeaderRef.current = headerCell;
     resizeStartXRef.current = event.clientX;
     resizeStartWidthRef.current = headerCell.offsetWidth;
-    pendingWidthRef.current = null;
-    setResizingColumn(columnIndex);
+    resizeStartTableWidthRef.current =
+      tableRef.current?.getBoundingClientRect().width ??
+      initialColumnWidths.reduce((total, width) => total + width, 0);
+    resizeStartWidthsRef.current = Array.from({ length: columnCount }, (_, offset) => {
+      const index = columnIndex + offset;
+      return (
+        colElemsRef.current[index]?.getBoundingClientRect().width ??
+        columnWidths.get(index) ??
+        initialColumnWidths[index] ??
+        COLUMN.DEFAULT_WIDTH
+      );
+    });
+    pendingWidthsRef.current = null;
+    setResizingRange({ start: columnIndex, count: columnCount });
   };
 
   const handleResizeMove = React.useCallback(
     (event: MouseEvent) => {
-      if (resizingColumn === null) {
+      if (resizingRange === null) {
         return;
       }
       const deltaX = event.clientX - resizeStartXRef.current;
-      const minWidth = columnMinWidthsRef.current[resizingColumn] ?? COLUMN.MIN_WIDTH;
-      const newWidth = Math.max(minWidth, resizeStartWidthRef.current + deltaX);
-      // Write directly to <col> — avoids React re-render during drag.
-      const col = colElemsRef.current[resizingColumn];
-      if (col) {
-        col.style.width = `${newWidth}px`;
+      const minWidths = Array.from(
+        { length: resizingRange.count },
+        (_, offset) => columnMinWidthsRef.current[resizingRange.start + offset] ?? COLUMN.MIN_WIDTH
+      );
+      const resized = resizeColumnRange(
+        resizeStartWidthsRef.current,
+        minWidths,
+        resizeStartWidthRef.current + deltaX
+      );
+
+      resized.widths.forEach((newWidth, offset) => {
+        const columnIndex = resizingRange.start + offset;
+        // Write directly to <col> to keep dragging responsive.
+        const col = colElemsRef.current[columnIndex];
+        if (col) {
+          col.style.width = `${newWidth}px`;
+        }
+        const footerCol = footerColElemsRef.current[columnIndex];
+        if (footerCol) {
+          footerCol.style.width = `${newWidth}px`;
+        }
+      });
+      const nextTableWidth =
+        resizeStartTableWidthRef.current - resizeStartWidthRef.current + resized.totalWidth;
+      if (tableRef.current) {
+        tableRef.current.style.width = `${nextTableWidth}px`;
       }
-      const footerCol = footerColElemsRef.current[resizingColumn];
-      if (footerCol) {
-        footerCol.style.width = `${newWidth}px`;
+      if (footerTableRef.current) {
+        footerTableRef.current.style.width = `${nextTableWidth}px`;
       }
-      pendingWidthRef.current = newWidth;
+      pendingWidthsRef.current = resized.widths;
     },
-    [resizingColumn]
+    [resizingRange]
   );
 
   const handleResizeEnd = React.useCallback(() => {
-    if (resizingColumn !== null) {
-      const newWidth = pendingWidthRef.current;
-      if (newWidth !== null) {
+    if (resizingRange !== null) {
+      const newWidths = pendingWidthsRef.current;
+      if (newWidths !== null) {
         setColumnWidths((prev) => {
           const next = new Map(prev);
-          next.set(resizingColumn, newWidth);
+          newWidths.forEach((newWidth, offset) => {
+            next.set(resizingRange.start + offset, newWidth);
+          });
           return next;
         });
         if (onColumnResize && columns) {
-          const column = columns[resizingColumn];
-          if (column && column.fields.length > 0) {
-            onColumnResize(column.fields[0].name, newWidth);
-          }
+          newWidths.forEach((newWidth, offset) => {
+            const column = columns[resizingRange.start + offset];
+            const widthField = column?.fields[column.fields.length - 1];
+            if (widthField) {
+              onColumnResize(getDisplayName(widthField), newWidth);
+            }
+          });
         }
       }
     }
-    setResizingColumn(null);
+    setResizingRange(null);
     resizingHeaderRef.current = null;
-    pendingWidthRef.current = null;
+    pendingWidthsRef.current = null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resizingColumn, onColumnResize]);
+  }, [resizingRange, onColumnResize]);
 
   React.useEffect(() => {
-    if (resizingColumn !== null) {
+    if (resizingRange !== null) {
       document.addEventListener('mousemove', handleResizeMove);
       document.addEventListener('mouseup', handleResizeEnd);
       return () => {
@@ -570,7 +610,7 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
       };
     }
     return undefined;
-  }, [resizingColumn, handleResizeMove, handleResizeEnd]);
+  }, [resizingRange, handleResizeMove, handleResizeEnd]);
 
   // ── Header structure (from pipeline) ────────────────────────────────────────
   const { headerRows, columns, maxDepth } = useMemo(() => {
@@ -585,11 +625,21 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
   }, [visibleData, columnGrouping.enabled, normalizedRootGroups]);
 
   const initialColumnWidths = useMemo(() => {
-    const rootFields = columns.map((column) => column.fields[0]).filter(Boolean);
-    return computeColWidths(rootFields, width);
+    const leafFields = columns.map((column) => column.fields[column.fields.length - 1]).filter(Boolean);
+    return computeColWidths(leafFields, width);
   }, [columns, width]);
+  const tableWidth = useMemo(
+    () =>
+      columns.reduce(
+        (total, _, index) => total + (columnWidths.get(index) ?? initialColumnWidths[index]),
+        0
+      ),
+    [columnWidths, columns, initialColumnWidths]
+  );
   React.useEffect(() => {
-    columnMinWidthsRef.current = columns.map((column) => column.fields[0]?.config?.custom?.minWidth ?? COLUMN.MIN_WIDTH);
+    columnMinWidthsRef.current = columns.map(
+      (column) => column.fields[column.fields.length - 1]?.config?.custom?.minWidth ?? COLUMN.MIN_WIDTH
+    );
   }, [columns]);
 
   const footerFields = useMemo(
@@ -1186,7 +1236,12 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
         }}
         onKeyDown={disableKeyboardEvents ? undefined : handleTableKeyDown}
       >
-        <table className={styles.table}>
+        <table
+          className={styles.table}
+          ref={tableRef}
+          style={{ width: `${tableWidth}px` }}
+          data-testid="grouped-table-content"
+        >
           {/*
            * <colgroup> is the single source of truth for column widths with
            * table-layout:fixed.  During resize we write directly to the matching
@@ -1273,8 +1328,14 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
                             )}
                           </div>
                           <div
-                            className={`${styles.resizeHandle} ${resizingColumn === cell.columnIndex ? styles.resizing : ''}`}
-                            onMouseDown={(e) => handleResizeStart(cell.columnIndex, e)}
+                            className={`${styles.resizeHandle} ${
+                              resizingRange?.start === cell.columnIndex &&
+                              resizingRange.count === cell.colSpan
+                                ? styles.resizing
+                                : ''
+                            }`}
+                            data-testid={`grouped-resize-${rowIndex}-${cell.columnIndex}-${cell.colSpan}`}
+                            onMouseDown={(e) => handleResizeStart(cell.columnIndex, cell.colSpan, e)}
                           />
                         </th>
                       );
@@ -1312,7 +1373,11 @@ export const TableWithGroupedHeaders: React.FC<TableWithGroupedHeadersProps> = (
       </div>
 
       {hasFooter && (
-        <table className={styles.table}>
+        <table
+          className={styles.table}
+          ref={footerTableRef}
+          style={{ width: `${tableWidth}px` }}
+        >
           <colgroup>
             {columns.map((_, i) => {
               const w = columnWidths.get(i) ?? initialColumnWidths[i];

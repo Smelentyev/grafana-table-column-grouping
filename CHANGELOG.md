@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.13 (2026-06-14)
+
+### Fixed
+- Expanded grouped tables to use the available panel width with the same automatic column sizing behavior as Grafana's built-in table
+- Made leaf-column resize handles update only the selected column
+- Made parent-group resize handles distribute width proportionally across their leaf columns while respecting minimum widths
+- Kept table, footer, and persisted field widths synchronized during resize
+
+### Validation
+- `npm run typecheck`
+- `npm run lint`
+- `npm run test:ci`
+- `npm run build`
+- `npm run e2e`
+
 ## 1.0.12 (2026-04-21)
 
 ### Changed
